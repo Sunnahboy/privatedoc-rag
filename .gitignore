@@ -5,7 +5,25 @@ build/
 dist/
 wheels/
 *.egg-info
-
+.env
+.pyo
+.pyd
+.Python
 # Virtual environments
 .venv
+
+# Data
+data/uploads/*
+!data/uploads/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
 
