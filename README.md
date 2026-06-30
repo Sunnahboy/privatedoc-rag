@@ -4,7 +4,9 @@ PrivateDoc RAG is a self-hosted document intelligence system that lets users upl
 
 ## Summary
 
-This project is designed as a production-style RAG system, not a basic chatbot. It focuses on document ingestion, chunking, embeddings, semantic retrieval, citation-based answering, evaluation, and deployment.
+This project is designed as a production-style Retrieval-Augmented Generation system, not a basic chatbot. It focuses on document ingestion, text extraction, chunking, embedding generation, semantic retrieval, citation-based answering, evaluation, and deployment.
+
+The goal is to build a practical AI engineering project that demonstrates backend development, retrieval design, local AI inference, full-stack integration, and production-style deployment.
 
 ## Core Features
 
@@ -55,6 +57,48 @@ RAG Pipeline
 Answer + Citations + Sources
 ```
 
+## RAG Pipeline
+
+The system follows two main phases.
+
+### 1. Indexing Phase
+
+```text
+Document Upload
+  ↓
+File Validation
+  ↓
+Text Extraction
+  ↓
+Text Cleaning
+  ↓
+Chunking
+  ↓
+Local Embedding Generation
+  ↓
+Vector Storage in Qdrant
+  ↓
+Metadata Storage
+```
+
+### 2. Query Phase
+
+```text
+User Question
+  ↓
+Question Embedding
+  ↓
+Vector Search
+  ↓
+Relevant Chunk Retrieval
+  ↓
+Grounded Prompt Construction
+  ↓
+Local LLM Generation
+  ↓
+Answer + Citations + Source Preview
+```
+
 ## Project Goals
 
 * Build a complete local RAG system
@@ -67,38 +111,66 @@ Answer + Citations + Sources
 ## Planned API Endpoints
 
 ```text
-GET    /health
-POST   /documents/upload
-GET    /documents
-DELETE /documents/{document_id}
-POST   /chat
-GET    /evaluation
+GET     /health
+POST    /documents/upload
+GET     /documents
+DELETE  /documents/{document_id}
+POST    /chat
+GET     /evaluation
 ```
 
 ## Current Status
 
-```text
-Milestone 1: Backend skeleton
-```
+**Milestone 1: Backend Skeleton**
+
+The project is currently in the initial backend setup stage. The first milestone focuses on creating a clean FastAPI structure with configuration, logging, health checks, and documentation.
 
 ## Roadmap
 
 * [ ] FastAPI backend setup
 * [ ] Health endpoint
 * [ ] Document upload
-* [ ] PDF extraction
+* [ ] PDF text extraction
+* [ ] Text cleaning
 * [ ] Text chunking
 * [ ] Local embeddings
 * [ ] Qdrant vector storage
 * [ ] Retrieval pipeline
 * [ ] Local LLM generation
 * [ ] Citation support
+* [ ] Source preview
 * [ ] Frontend upload page
 * [ ] Frontend chat page
 * [ ] Evaluation dashboard
 * [ ] Docker deployment
 * [ ] Demo video
 
-## Summary
+## Advanced Roadmap
 
-Built a self-hosted RAG document assistant using FastAPI, Next.js, Qdrant, Ollama, and Docker, enabling users to upload documents and receive grounded answers with source citations.
+After the standard RAG pipeline works, the system may be extended with:
+
+* CAG-inspired caching for repeated questions and document summaries.
+* CRAG-inspired retrieval confidence checking for dynamic evaluation.
+* GraphRAG-style relationship extraction and entity-based retrieval.
+* KAG-inspired mutual indexing linking unstructured text to structured knowledge.
+* KAG logical reasoning using semantic graphs for multi-step queries.
+* Hybrid search using both vector search and keyword search.
+* Reranking for better retrieval quality.
+* Developer debug mode showing retrieved chunks, similarity scores, and latency.
+
+## Why This Project Matters
+
+Many AI demos only show a chatbot interface. PrivateDoc RAG is designed to go deeper by showing how an AI system is engineered end-to-end:
+
+* How documents are processed
+* How knowledge is chunked and indexed
+* How embeddings are generated locally
+* How relevant context is retrieved
+* How answers are grounded in sources
+* How hallucination risk is reduced
+* How retrieval quality is evaluated
+* How the system is deployed
+
+## License
+
+This project is currently under active development.
