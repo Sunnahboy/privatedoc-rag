@@ -14,12 +14,10 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = "development"
 
-
     # Upload settings
     upload_dir: str = "../data/uploads"
     max_upload_mb:str = 20
     allowed_file_extensions:str = ".pdf,.txt,.md,.ppt"
-
 
     #future RAG services
     qdrant_url: str = "http://localhost:6333"
@@ -46,7 +44,6 @@ class Settings(BaseSettings):
             - Set lookup is clean and fast.
             - It keeps validation logic out of the route
         """
-
         return{
             ext.strip().lower()
             for ext in self.allowed_extensions.split(",")
@@ -54,7 +51,6 @@ class Settings(BaseSettings):
 
         }
     
-
     @computed_field
     @property
     def max_upload_bytes(self)->int:
@@ -66,6 +62,5 @@ class Settings(BaseSettings):
             - Humans prefer configuring files limits in MB
         """
         return self.max_upload_mb * 1024 * 1024
-
 
 settings = Settings()
