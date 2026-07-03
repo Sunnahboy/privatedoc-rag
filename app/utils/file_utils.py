@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from fastapi import HTTPException, UploadFile, status
+from fastapi import HTTPException, status
 from app.config import settings
 
 def sanitize_filename(filename:str)->str:
@@ -59,10 +59,15 @@ def validate_file_size(file_size:int)->None:
     - Large files can consume memory and disk.
     - Upload limits protect the backend from abuse or accidents.
     """
-    if  file_size <=0:
+    if  file_size <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail= f"File too large. Maximum allowed size is {settings.max_upload_bytes} MB.",
+            detail= "File is Empty",
+        )
+    if file_size > settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"File too large. Maximum allowed size is {settings.max_upload_mb} MB.",
         )
     
 def ensure_upload_dir()->Path:
