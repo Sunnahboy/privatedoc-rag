@@ -16,9 +16,9 @@ class Settings(BaseSettings):
 
     # Upload settings
     upload_dir: str = "../data/uploads"
-    max_upload_mb:str = 20
+    max_upload_mb:int = 20
     allowed_file_extensions:str = ".pdf,.txt,.md,.ppt"
-    CHUNK_SIZE_BYTES = 1024 * 1024 #1MB
+    CHUNK_SIZE_BYTES:int = 1024 * 1024 #1MB
 
     #future RAG services
     qdrant_url: str = "http://localhost:6333"
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
         """
         return{
             ext.strip().lower()
-            for ext in self.allowed_extensions.split(",")
+            for ext in self.allowed_file_extensions.split(",")
             if ext.strip()
 
         }
