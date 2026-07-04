@@ -13,7 +13,7 @@ from app.utils.file_utils import(
 from app.utils.id_id_utils import generate_document_id
 from app.config import settings
 
-CHUNK_SIZE_BYTES = 1024 * 1024 #1MB
+
 
 async def save_uploaded_document(file:UploadFile)-> DocumentUploadResponse:
     """
@@ -51,7 +51,7 @@ async def save_uploaded_document(file:UploadFile)-> DocumentUploadResponse:
     try:
         async with aiofiles.open(saved_path, "wb") as out_file:
             while True:
-                chunk = await file.read(CHUNK_SIZE_BYTES)
+                chunk = await file.read(settings.CHUNK_SIZE_BYTES)
                 if not chunk:
                     break
                 total_size += len(chunk)
