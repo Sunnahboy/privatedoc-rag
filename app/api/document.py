@@ -14,7 +14,7 @@ router  = APIRouter(prefix="/document", tags =["Documents"])
 )
 
 
-async def upload_document(file:UploadFile - File(...))-> DocumentUploadResponse:
+async def upload_document(file:UploadFile = File(...))-> DocumentUploadResponse:
     """
     Upload a document.
 
