@@ -5,6 +5,7 @@ from app.api.health import router as health_router
 from app.config import settings
 from app.utils.logging_utils import configure_logging
 from contextlib import asynccontextmanager
+from app.api.document import router as documents_router
 configure_logging()
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ app.add_middleware(
 )
 
 app.include_router(health_router)
+app.include_router(documents_router)
 
 
 @app.get("/")
