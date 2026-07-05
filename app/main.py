@@ -49,7 +49,6 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(documents_router)
 
-
 @app.get("/")
 def root() -> dict:
     """
