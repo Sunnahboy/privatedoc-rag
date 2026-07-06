@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     allowed_file_extensions:str = ".pdf,.txt,.md,.ppt"
     CHUNK_SIZE_BYTES:int = 1024 * 1024 #1MB
 
+    
+    #Metadata database
+    #Development: SQLite
+    #Production later: PostgreSQL, for example:
+    #postgresql+asyncpg://user:password@postgres:5432/privatedoc
+    database_url: str = "sqlite+aiosqlite:///./privatedoc.db"
+    database_echo: bool = False
+
+
     #future RAG services
     qdrant_url: str = "http://localhost:6333"
     ollama_url: str = "http://localhost:11434"
