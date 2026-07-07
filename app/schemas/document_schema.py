@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 
 class DocumentUploadResponse(BaseModel):
     """
@@ -14,5 +15,38 @@ class DocumentUploadResponse(BaseModel):
     original_filename:str
     file_extension:str
     file_size_bytes:int
+    storage_provider:int
+    storage_key:str
     status:str
-    saved_path:str # Later will change this to avoid exposing raw in internal path
+    total_pages:int
+    total_chunks:int
+    created_at:datetime
+    #saved_path:str # Later will change this to avoid exposing raw in internal path
+
+
+    class DocumentListItem(BaseModel):
+      """
+      One document item returned by GET /documents.
+      """
+
+      document_id: str
+      filename: str
+      original_filename: str
+      file_extension: str
+      file_size_bytes: int
+      storage_provider: str
+      storage_key: str
+      status: str
+      total_pages: int
+      total_chunks: int
+      created_at: datetime
+      updated_at: datetime
+
+      class DocumentDeleteResponse(BaseModel):
+        """
+        Response returned after deleting a document.
+        """
+        document_id: str
+        deleted: bool
+        
+        
