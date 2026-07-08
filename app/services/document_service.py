@@ -68,6 +68,7 @@ async def save_uploaded_document(file:UploadFile,db:AsyncSession)-> DocumentUplo
        -metadata goes to sqlite.
        -Later, raw files can move to miniIO/s3
        -Later, metadata DB can move to postgresSql
+
     """
 
 
@@ -144,13 +145,51 @@ async def save_uploaded_document(file:UploadFile,db:AsyncSession)-> DocumentUplo
     finally:
         await file.close()
 
-    return DocumentUploadResponse(
-        document_id=document_id,
-        filename=stored_filename,
-        original_filename= original_filename,
-        file_extension=extension,
-        file_size_bytes=total_size,
-        status="uploaded",
-        saved_path=str(saved_path)
+async def list_documents(db: AsyncSession)-> list[DocumentListItem]:
+    """
+    Return all uploaded documents.
+
+    why ordered newest to first:
+     - Users usually care about recently uploaded documents first.
+    """
+    result = await db.execute(
+        select(Document).order_by(Document.created_at.desc())
     )
+
+    Documents = result.scalars().all()
+    return [_document_to_list_item(document) for document in Documents]
+
+async def delete_document_by_id(document_id: str, db: AsyncSession) -> DocumentDeleteResponse:
+    """
+    Delete one document.
+
+    Current deletion behavior:
+     - Delete Qdrant vectors.
+     - Delete chunk rows.
+     - Delete cache entries
+     - Delete graph entities and relationships.
+    """
+
+    document = await db.get(Document, document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code = status.HTTP_404_NOT_FOUND,
+            detail=f"Document {document_id} not found",
+        )
+    upload_dir = ensure_upload_dir()
+    saved_path = upload_dir / document.storage_key
+    saved_path.unlink(missing_ok=True)
+
+    await db.delete(document)
+    await db.commit()
+
+    return DocumentDeleteResponse(
+        document_id = document_id,
+        deleted =True,
+    )
+
+    
+
+    
         
