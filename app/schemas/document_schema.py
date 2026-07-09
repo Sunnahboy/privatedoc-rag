@@ -15,7 +15,7 @@ class DocumentUploadResponse(BaseModel):
     original_filename:str
     file_extension:str
     file_size_bytes:int
-    storage_provider:int
+    storage_provider:str
     storage_key:str#expose for now ,for debug , will hide later for normal users
     status:str
     total_pages:int

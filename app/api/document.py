@@ -26,7 +26,7 @@ router  = APIRouter(prefix="/document", tags =["Documents"])
 )
 
 
-async def upload_document(file:Annotated[UploadFile, File(...)],db:Annotated[AsyncSession, Depends(get_db)])-> DocumentDeleteResponse:
+async def upload_document(file:Annotated[UploadFile, File(...)],db:Annotated[AsyncSession, Depends(get_db)])-> DocumentUploadResponse:
     """
     Upload a document.
 

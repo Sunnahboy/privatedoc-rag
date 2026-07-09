@@ -36,17 +36,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
 
-    async def init_db() -> None:
-        """
-        Create database tables during development.
-        Later:
-        - Replace this with Alembic migrations.
-        - For now, it keeps Milestone 2 simple and runnable.
-        """
-        #we import models here so sqlAlchemy registers them before create_all()
+async def init_db() -> None:
+    """
+    Create database tables during development.
+    Later:
+    - Replace this with Alembic migrations.
+    - For now, it keeps Milestone 2 simple and runnable.
+    """
+    #we import models here so sqlAlchemy registers them before create_all()
 
-        from app.models.document import Document  
+    from app.models.document import Document  
 
-
-        async with engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)

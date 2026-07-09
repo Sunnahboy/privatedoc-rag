@@ -20,7 +20,7 @@ from app.utils.id_id_utils import generate_document_id
 from app.config import settings
 
 def _document_to_upload_response(document:Document) ->DocumentUploadResponse:
-    return DocumentDeleteResponse(
+    return DocumentUploadResponse(
         document_id=document.id,
         filename=document.stored_filename,
         original_filename=document.original_filename,
@@ -37,6 +37,7 @@ def _document_to_upload_response(document:Document) ->DocumentUploadResponse:
 def _document_to_list_item(document:Document) -> DocumentListItem:
     return DocumentListItem(
         document_id=document.id,
+         filename=document.stored_filename,
         original_filename=document.original_filename,
         file_extension=document.file_extension,
         file_size_bytes=document.file_size_bytes,
