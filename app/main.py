@@ -34,8 +34,8 @@ async def lifespan(app: FastAPI)->AsyncGenerator[None, None]:
 
     yield 
 
-    #----SHUTDOWN logic----
-    # TODO: cleanup code (i.e., closing db connections)
+    #    SHUTDOWN logic
+    # TODO: cleanup code (i.e closing db connections)
     logger.info("Shutting down %s", settings.app_name)
 
 
