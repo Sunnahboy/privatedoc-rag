@@ -45,7 +45,7 @@ async def init_db() -> None:
     """
     #we import models here so sqlAlchemy registers them before create_all()
 
-    from app.models.document import Document  
+    from app.models.document import Document  #noqa: F401
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
