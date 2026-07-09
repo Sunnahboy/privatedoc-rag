@@ -3,17 +3,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.health import router as health_router
 from app.config import settings
+from app.database import init_db
 from app.utils.logging_utils import configure_logging
 from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
 from app.api.document import router as documents_router
 configure_logging()
 logger = logging.getLogger(__name__)
 
 # A lifespan context manager
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI)->AsyncGenerator[None, None]:
     """
     Handles backend startup and shutdown tasks.
+
+    why:
+      -startups and shutdowns logic belongs here
+      - initialize the database before serving requests
+      -replaces the older start up event loop style code.
     """
     # ----Startup logic------
     logger.info("starting %s v%s", settings.app_name,settings.app_version)
@@ -22,6 +29,8 @@ async def lifespan(app: FastAPI):
     # - Verify database connection
     # - Verify Qdrant connection
     # - Verify Ollama connection
+    await init_db()
+    logger.info("Database initialized")
 
     yield 
 
@@ -61,4 +70,5 @@ def root() -> dict:
         "message":"PrivateDoc RAG backend is running.",
         "docs":"/docs",
         "health":"/health",
+        "documents": "/document",
     }
