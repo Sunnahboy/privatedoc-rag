@@ -20,4 +20,4 @@ class BaseExtractor(ABC):
         Returns:
             ExtractionResult object containing the parsed text/metadata.
         """
-        pass
+        ...
