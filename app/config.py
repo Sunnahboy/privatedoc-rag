@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     """
@@ -16,20 +17,18 @@ class Settings(BaseSettings):
 
     # Upload settings
     upload_dir: str = "../data/uploads"
-    max_upload_mb:int = 20
-    allowed_file_extensions:str = ".pdf,.txt,.md,.ppt"
-    CHUNK_SIZE_BYTES:int = 1024 * 1024 #1MB
+    max_upload_mb: int = 20
+    allowed_file_extensions: str = ".pdf,.txt,.md,.ppt"
+    CHUNK_SIZE_BYTES: int = 1024 * 1024  # 1MB
 
-    
-    #Metadata database
-    #Development: SQLite
-    #Production later: PostgreSQL, for example:
-    #postgresql+asyncpg://user:password@postgres:5432/privatedoc
+    # Metadata database
+    # Development: SQLite
+    # Production later: PostgreSQL, for example:
+    # postgresql+asyncpg://user:password@postgres:5432/privatedoc
     database_url: str = "sqlite+aiosqlite:///./privatedoc.db"
     database_echo: bool = False
 
-
-    #future RAG services
+    # future RAG services
     qdrant_url: str = "http://localhost:6333"
     ollama_url: str = "http://localhost:11434"
     embedding_model: str = "nomic-embed-text"
@@ -42,35 +41,35 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
-    def allowed_extensions_set(self)->set[str]:
+    def allowed_extensions_set(self) -> set[str]:
         """
-         Convert comma separated extensions into a python set.
-         Runs only once at startup
-        
-         example:
-          ".pdf,.txt,.md,.ppt" -> {".pdf",".txt",".md",".ppt"}
+        Convert comma separated extensions into a python set.
+        Runs only once at startup
 
-          why:
-            - Set lookup is clean and fast.
-            - It keeps validation logic out of the route
+        example:
+         ".pdf,.txt,.md,.ppt" -> {".pdf",".txt",".md",".ppt"}
+
+         why:
+           - Set lookup is clean and fast.
+           - It keeps validation logic out of the route
         """
-        return{
+        return {
             ext.strip().lower()
             for ext in self.allowed_file_extensions.split(",")
             if ext.strip()
-
         }
-    
+
     @computed_field
     @property
-    def max_upload_bytes(self)->int:
+    def max_upload_bytes(self) -> int:
         """
         Convert MB to bytes.
-         
+
         why:
             - uploaded files are measured in bytes.
             - Humans prefer configuring files limits in MB
         """
         return self.max_upload_mb * 1024 * 1024
+
 
 settings = Settings()

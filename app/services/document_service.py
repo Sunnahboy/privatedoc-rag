@@ -1,25 +1,26 @@
-
 from pathlib import Path
+
 import aiofiles
-from fastapi import UploadFile, HTTPException,status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.config import settings
 from app.models.document import Document
 from app.schemas.document_schema import (
     DocumentDeleteResponse,
     DocumentListItem,
     DocumentUploadResponse,
 )
-from app.utils.file_utils import(
+from app.utils.file_utils import (
     ensure_upload_dir,
     get_file_extension,
     sanitize_filename,
     validate_file_extension,
 )
 from app.utils.id_id_utils import generate_document_id
-from app.config import settings
+from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-def _document_to_upload_response(document:Document) ->DocumentUploadResponse:
+
+def _document_to_upload_response(document: Document) -> DocumentUploadResponse:
     return DocumentUploadResponse(
         document_id=document.id,
         filename=document.stored_filename,
@@ -32,12 +33,13 @@ def _document_to_upload_response(document:Document) ->DocumentUploadResponse:
         total_pages=document.total_pages,
         total_chunks=document.total_chunks,
         created_at=document.created_at,
-
     )
-def _document_to_list_item(document:Document) -> DocumentListItem:
+
+
+def _document_to_list_item(document: Document) -> DocumentListItem:
     return DocumentListItem(
         document_id=document.id,
-         filename=document.stored_filename,
+        filename=document.stored_filename,
         original_filename=document.original_filename,
         file_extension=document.file_extension,
         file_size_bytes=document.file_size_bytes,
@@ -48,10 +50,12 @@ def _document_to_list_item(document:Document) -> DocumentListItem:
         total_chunks=document.total_chunks,
         created_at=document.created_at,
         updated_at=document.updated_at,
-
     )
 
-async def save_uploaded_document(file:UploadFile,db:AsyncSession)-> DocumentUploadResponse:
+
+async def save_uploaded_document(
+    file: UploadFile, db: AsyncSession
+) -> DocumentUploadResponse:
     """
     Validate , save  and persist metadata for an uploaded document asynchronously.
 
@@ -72,24 +76,24 @@ async def save_uploaded_document(file:UploadFile,db:AsyncSession)-> DocumentUplo
 
     """
 
-
     if file.filename is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must have a filename.")
-    
+            detail="Uploaded file must have a filename.",
+        )
+
     original_filename = file.filename
     safe_filename = sanitize_filename(original_filename)
     validate_file_extension(safe_filename)
     document_id = generate_document_id()
     extension = get_file_extension(safe_filename)
 
-    Upload_dir  = ensure_upload_dir()
-    #store as doc_id + original safe extension
-    stored_filename  = f"{document_id}{extension}"
-    saved_path: Path  = Upload_dir / stored_filename
-    
-    total_size  = 0
+    Upload_dir = ensure_upload_dir()
+    # store as doc_id + original safe extension
+    stored_filename = f"{document_id}{extension}"
+    saved_path: Path = Upload_dir / stored_filename
+
+    total_size = 0
     try:
         async with aiofiles.open(saved_path, "wb") as out_file:
             while True:
@@ -100,22 +104,23 @@ async def save_uploaded_document(file:UploadFile,db:AsyncSession)-> DocumentUplo
 
                 if total_size > settings.max_upload_bytes:
                     await out_file.close()
-                    saved_path.unlink(missing_ok=True)#clean  up partially written oversized files.
-                    
+                    saved_path.unlink(
+                        missing_ok=True
+                    )  # clean  up partially written oversized files.
+
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                         detail=f"File too large. Maximum allowed size is {settings.max_upload_mb} MB.",
                     )
-                
+
                 await out_file.write(chunk)
 
             if total_size == 0:
                 saved_path.unlink(missing_ok=True)
                 raise HTTPException(
-                    status_code= status.HTTP_400_BAD_REQUEST,
-                    detail="Uploaded file is empty"
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Uploaded file is empty",
                 )
-            
 
             document = Document(
                 id=document_id,
@@ -127,18 +132,18 @@ async def save_uploaded_document(file:UploadFile,db:AsyncSession)-> DocumentUplo
                 storage_key=stored_filename,
                 status="uploaded",
                 total_pages=0,
-                total_chunks=0
+                total_chunks=0,
             )
 
             db.add(document)
             await db.commit()
             await db.refresh(document)
             return _document_to_upload_response(document)
-        
+
     except HTTPException:
         raise
     except Exception:
-        #if db insert fails after file save, remove the saved file
+        # if db insert fails after file save, remove the saved file
         saved_path.unlink(missing_ok=True)
         await db.rollback()
         raise
@@ -146,21 +151,23 @@ async def save_uploaded_document(file:UploadFile,db:AsyncSession)-> DocumentUplo
     finally:
         await file.close()
 
-async def list_documents(db: AsyncSession)-> list[DocumentListItem]:
+
+async def list_documents(db: AsyncSession) -> list[DocumentListItem]:
     """
     Return all uploaded documents.
 
     why ordered newest to first:
      - Users usually care about recently uploaded documents first.
     """
-    result = await db.execute(
-        select(Document).order_by(Document.created_at.desc())
-    )
+    result = await db.execute(select(Document).order_by(Document.created_at.desc()))
 
     Documents = result.scalars().all()
     return [_document_to_list_item(document) for document in Documents]
 
-async def delete_document_by_id(document_id: str, db: AsyncSession) -> DocumentDeleteResponse:
+
+async def delete_document_by_id(
+    document_id: str, db: AsyncSession
+) -> DocumentDeleteResponse:
     """
     Delete one document.
 
@@ -175,7 +182,7 @@ async def delete_document_by_id(document_id: str, db: AsyncSession) -> DocumentD
 
     if document is None:
         raise HTTPException(
-            status_code = status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Document {document_id} not found",
         )
     upload_dir = ensure_upload_dir()
@@ -186,11 +193,6 @@ async def delete_document_by_id(document_id: str, db: AsyncSession) -> DocumentD
     await db.commit()
 
     return DocumentDeleteResponse(
-        document_id = document_id,
-        deleted =True,
+        document_id=document_id,
+        deleted=True,
     )
-
-    
-
-    
-        

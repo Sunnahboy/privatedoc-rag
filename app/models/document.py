@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
+
+from app.database import Base
 from sqlalchemy import BigInteger, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.database import Base
 
-def utc_now()-> datetime:
+def utc_now() -> datetime:
     """
     Return timezone aware utc datetime.
      Why:
@@ -21,7 +22,7 @@ class Document(Base):
 
     This table does not store the raw PDF/file bytes.
     It stores facts about the file and where the file lives.
-    
+
     """
 
     __tablename__ = "documents"
@@ -29,11 +30,13 @@ class Document(Base):
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
 
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    stored_filename:Mapped[str] = mapped_column(String(255),nullable=False)
+    stored_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_extension: Mapped[str] = mapped_column(String(20), nullable=False)
     file_size_bytes: Mapped[str] = mapped_column(BigInteger, nullable=False)
 
-    storage_provider: Mapped[str] = mapped_column(String(50), default="local", nullable=False)
+    storage_provider: Mapped[str] = mapped_column(
+        String(50), default="local", nullable=False
+    )
     storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
 
     status: Mapped[str] = mapped_column(String(50), default="uploaded", nullable=False)
