@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -18,22 +19,19 @@ class PDFExtractor(BaseExtractor):
 
     """
 
-    async def extract(self, file_path: Path) -> ExtractionResult:
-        document = None
-        pages = []
-
+    def _sync_extract(self, file_path: Path) -> ExtractionResult:
+        # heavy lifting in a normal sync function
         try:
-            document = fitz.open(file_path)
-            metadata = document.metadata
-            for page in document:
-                pages.append(page.get_text())
-            return ExtractionResult(
-                text="\n".join(pages),
-                page_count=document.page_count,
-                metadata=metadata,
-            )
-        except Exception as e:
-            raise RuntimeError(f"Failed to extract PDF {file_path}: {str(e)}")
-        finally:
-            if document is not None:
-                document.close()
+            with fitz.open(file_path) as document:
+                pages = [page.get_text() for page in document]
+                return ExtractionResult(
+                    text="\n".join(pages),
+                    page_count=document.page_count,
+                    metadata=document.metadata,
+                )
+        except fitz.FileDataError as exc:
+            raise RuntimeError(f"Invalid PDF: {file_path}") from exc
+
+    async def extract(self, file_path: Path) -> ExtractionResult:
+        # Run the heavy sync code in a separate thread
+        return await asyncio.to_thread(self._sync_extract, file_path)
