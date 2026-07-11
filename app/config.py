@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # Upload settings
     upload_dir: str = "../data/uploads"
     max_upload_mb: int = 20
-    allowed_file_extensions: str = ".pdf,.txt,.md,.ppt"
+    allowed_file_extensions: str = ".pdf,.txt,.md,.ppt,.docx"
     CHUNK_SIZE_BYTES: int = 1024 * 1024  # 1MB
 
     # Metadata database
