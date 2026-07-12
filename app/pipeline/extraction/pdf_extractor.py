@@ -9,7 +9,7 @@ from .models import ExtractionResult
 
 class PDFExtractor(BaseExtractor):
     """
-     Extract text from PDF documents.
+     Extract text from PDF documents, later will mark more robust like scanning (OCR).
 
     Why PyMuPDF?
     - Fast
