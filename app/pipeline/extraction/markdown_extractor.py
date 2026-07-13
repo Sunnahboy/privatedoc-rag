@@ -6,7 +6,7 @@ from .base import BaseExtractor
 from .models import ExtractionResult
 
 
-class TXTExtractor(BaseExtractor):
+class MarkdownExtractor(BaseExtractor):
     async def extract(self, file_path: Path) -> ExtractionResult:
         # open and read file async hence no blocking other
         def read_file():
@@ -19,4 +19,6 @@ class TXTExtractor(BaseExtractor):
             page_count=1,
             metadata={},
         )
-#Later, we'll preserve structure:
+
+
+# Later, we'll preserve structure:
