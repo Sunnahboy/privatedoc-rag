@@ -1,8 +1,10 @@
 from pathlib import Path
 
 from .base import BaseExtractor
+from .docx_extractor import DOCXExtractor
 from .markdown_extractor import MarkdownExtractor
 from .pdf_extractor import PDFExtractor
+from .pptx_extractor import PPTExtractor
 from .txt_extractor import TXTExtractor
 
 
@@ -24,6 +26,8 @@ class ExtractorFactory:
             ".pdf": PDFExtractor,
             ".txt": TXTExtractor,
             ".md": MarkdownExtractor,
+            ".pptx": PPTExtractor,
+            ".docx": DOCXExtractor,
         }
         extractor_class = mapping.get(extension)
 
