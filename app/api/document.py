@@ -111,7 +111,7 @@ async def delete_document(
 
     current behavior.
      -Delete local file.
-     - Delete metadata row.
+     -Delete metadata row.
 
     Later behavior:
      -Delete chunks

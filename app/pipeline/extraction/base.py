@@ -18,6 +18,6 @@ class BaseExtractor(ABC):
             file_path: The Path object pointing to the target file.
 
         Returns:
-            ExtractionResult object containing the parsed text/metadata.
+            ExtractionResult object containing the parsed metadata.
         """
         ...
