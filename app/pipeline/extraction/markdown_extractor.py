@@ -8,7 +8,7 @@ from .models import ExtractionResult
 
 class MarkdownExtractor(BaseExtractor):
     async def extract(self, file_path: Path) -> ExtractionResult:
-        # open and read file async hence no blocking other
+        # open and read file async hence no blocking others
         def read_file():
             return file_path.read_text(encoding="utf-8", errors="ignore")
 

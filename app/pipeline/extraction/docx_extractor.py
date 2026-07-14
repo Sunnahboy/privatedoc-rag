@@ -8,7 +8,7 @@ from .base import BaseExtractor, ExtractionResult
 
 class DOCXExtractor(BaseExtractor):
     """
-    Extract text from word
+    Extract text from word doc
     """
 
     def _syc_extract(self, file_path: Path) -> ExtractionResult:
