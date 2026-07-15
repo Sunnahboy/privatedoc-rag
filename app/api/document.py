@@ -16,7 +16,7 @@ from app.services.document_service import (
     save_uploaded_document,
 )
 
-logger = logging.getLogger(__name__)  # tell which file generated the message
+logger = logging.getLogger(__name__) 
 
 router = APIRouter(prefix="/document", tags=["Documents"])
 
