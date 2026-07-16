@@ -20,7 +20,7 @@ class ExtractorFactory:
     @staticmethod
     def create(file_path: Path) -> BaseExtractor:
 
-        extension = file_path.suffix_lower()
+        extension = file_path.suffix.lower()
 
         mapping = {
             ".pdf": PDFExtractor,
