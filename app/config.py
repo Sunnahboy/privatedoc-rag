@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     upload_dir: str = "../data/uploads"
     max_upload_mb: int = 20
     allowed_file_extensions: str = ".pdf,.txt,.md,.ppt,.docx"
-    CHUNK_SIZE_BYTES: int = 1024 * 1024  # 1MB
+    file_stream_chunk_size_bytes: int = 1024 * 1024  # 1MB
 
     # Metadata database
     # Development: SQLite
@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     embedding_model: str = "nomic-embed-text"
     generation_model: str = "llama3.1"
+    rag_chunk_size: int = 500
+    rag_chunk_overlap: int = 100
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
