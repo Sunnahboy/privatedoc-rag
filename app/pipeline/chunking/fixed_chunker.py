@@ -1,13 +1,14 @@
 import uuid
 
+from app.config import settings
 from app.pipeline.cleaning.models import CleaningResult
 
 from .base import BaseChunker
 from .models import Chunk
 
 
-class fixedChunker(BaseChunker):
-    def __init__(self, chunk_size: int = 500):
+class FixedChunker(BaseChunker):
+    def __init__(self, chunk_size: int = settings.rag_chunk_size):
         if chunk_size < 0:
             raise ValueError("chunk size must be greater than zero")
         self.chunk_size = chunk_size
@@ -20,7 +21,7 @@ class fixedChunker(BaseChunker):
         chunks: list[Chunk] = []
 
         for start in range(0, len(text), self.chunk_size):
-            end = min(start + self.chunk, len(text))
+            end = min(start + self.chunk_size, len(text))
 
             chunks.append(
                 Chunk(
