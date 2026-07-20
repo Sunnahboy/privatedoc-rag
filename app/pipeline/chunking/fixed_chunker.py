@@ -8,10 +8,18 @@ from .models import Chunk
 
 
 class FixedChunker(BaseChunker):
-    def __init__(self, chunk_size: int = settings.rag_chunk_size):
-        if chunk_size < 0:
+    def __init__(self, chunk_size: int | None = None, overlap: int | None = None):
+        self.chunk_size = chunk_size or settings.rag_chunk_size
+        self.overlap = overlap or settings.rag_chunk_overlap
+
+        if self.chunk_size <= 0:
             raise ValueError("chunk size must be greater than zero")
         self.chunk_size = chunk_size
+
+        if self.overlap < 0:
+            raise ValueError("Overlap cannot be negative")
+        if self.overlap >= self.chunk_size:
+            raise ValueError("Overlap cannot be smaller than chunk_size")
 
     async def chunk(
         self,
