@@ -27,13 +27,14 @@ class FixedChunker(BaseChunker):
     ) -> list[Chunk]:
         text = cleaning_result.text
         chunks: list[Chunk] = []
+        stride = self.chunk_size - self.overlap
 
-        for start in range(0, len(text), self.chunk_size):
+        for start in range(0, len(text), stride):
             end = min(start + self.chunk_size, len(text))
 
             chunks.append(
                 Chunk(
-                    Chunk_id=str(uuid),
+                    chunk_id=str(uuid.uuid4()),
                     text=text[start:end],
                     start_char=start,
                     end_char=end,
