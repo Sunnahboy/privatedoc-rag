@@ -2,7 +2,7 @@ from app.pipeline.chunking.models import Chunk
 
 
 def test_chunk_creation():
-    chuck = Chunk(Chunk_id="1", text="Hello", start_char=0, end_char=5)
+    chuck = Chunk(chunk_id="1", text="Hello", start_char=0, end_char=5)
 
     assert chuck.text == "Hello"
     assert chuck.start_char == 0
