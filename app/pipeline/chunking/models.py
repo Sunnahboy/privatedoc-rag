@@ -12,7 +12,7 @@ class Chunk:
      -Citation source
     """
 
-    Chunk_id: str
+    chunk_id: str
     text: str
     start_char: int
     end_char: int
