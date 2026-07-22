@@ -13,6 +13,9 @@ class Chunk:
     """
 
     chunk_id: str
+    document_id:str
+    chunk_index:int
     text: str
     start_char: int
     end_char: int
+    metadata:dict[str,any]
