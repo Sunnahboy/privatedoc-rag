@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(slots=True)
@@ -18,4 +18,4 @@ class Chunk:
     text: str
     start_char: int
     end_char: int
-    metadata:dict[str,any]
+    metadata:dict[str,any] = field(default_factory=dict)
