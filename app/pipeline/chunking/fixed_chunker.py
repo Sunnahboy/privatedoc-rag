@@ -9,8 +9,8 @@ from .models import Chunk
 
 class FixedChunker(BaseChunker):
     def __init__(self, chunk_size: int | None = None, overlap: int | None = None):
-        self.chunk_size = chunk_size or settings.rag_chunk_size
-        self.overlap = overlap or settings.rag_chunk_overlap
+        self.chunk_size = settings.rag_chunk_size if chunk_size is None else chunk_size
+        self.overlap = settings.rag_chunk_overlap if overlap is None else overlap
 
         if self.chunk_size <= 0:
             raise ValueError("chunk size must be greater than zero")
@@ -19,7 +19,7 @@ class FixedChunker(BaseChunker):
         if self.overlap < 0:
             raise ValueError("Overlap cannot be negative")
         if self.overlap >= self.chunk_size:
-            raise ValueError("Overlap cannot be smaller than chunk_size")
+            raise ValueError("Overlap must be smaller than chunk_size")
 
     async def chunk(
         self,
@@ -29,12 +29,14 @@ class FixedChunker(BaseChunker):
         chunks: list[Chunk] = []
         stride = self.chunk_size - self.overlap
 
-        for start in range(0, len(text), stride):
+        for index, start in enumerate(range(0, len(text), stride)):
             end = min(start + self.chunk_size, len(text))
 
             chunks.append(
                 Chunk(
                     chunk_id=str(uuid.uuid4()),
+                    document_id=cleaning_result.metadata["document_id"],  # placeholder for now
+                    chunk_index= index,  # current loop index
                     text=text[start:end],
                     start_char=start,
                     end_char=end,
