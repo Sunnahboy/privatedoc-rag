@@ -145,6 +145,42 @@ The project is currently in the initial backend setup stage. The first milestone
 * [ ] Docker deployment
 * [ ] Demo video
 
+## Core File structure
+PrivateDoc RAG
+
+├── API Layer
+│
+├── Ingestion Pipeline
+│      Upload
+│      Extraction
+│      Cleaning
+│      Chunking
+│      Embedding
+│      Indexing
+│
+├── Retrieval Pipeline
+│      Query Embedding
+│      Hybrid Search
+│      Metadata Filter
+│      Reranking
+│
+├── Generation Pipeline
+│      Prompt Builder
+│      LLM
+│      Citations
+│
+├── Infrastructure
+│      Database
+│      Qdrant
+│      Ollama
+│      Logging
+│      Config
+│
+└── Evaluation & Monitoring
+       Metrics
+       Benchmarks
+       Observability
+
 ## Advanced Roadmap
 
 After the standard RAG pipeline works, the system may be extended with:
