@@ -14,5 +14,5 @@ class EmbeddingResult:
     chunk_index: int
     vector: list[float]
     model_name: str
-    dimensionsL: int
+    dimensions: int
     metadata: dict[str, Any] = field(default_factory=dict)
