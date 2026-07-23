@@ -31,8 +31,12 @@ class Settings(BaseSettings):
     # future RAG services
     qdrant_url: str = "http://localhost:6333"
     ollama_url: str = "http://localhost:11434"
+    embedding_provider: str = "ollama"
     embedding_model: str = "nomic-embed-text"
+    embedding_dimensions: int = 768
+    embedding_timeout: int = 30
     generation_model: str = "llama3.1"
+
     rag_chunk_size: int = 500
     rag_chunk_overlap: int = 100
     model_config = SettingsConfigDict(
