@@ -10,6 +10,6 @@ def create_embedder() -> BaseEmbedder:
      -for now one provider
     """
 
-    if settings.embedding_model == "ollama":
+    if settings.embedding_provider == "ollama":
         return OllamaEmbedder()
     raise ValueError(f"unsupported  embedding provider: {settings.embedding_model}")
