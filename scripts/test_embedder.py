@@ -17,8 +17,10 @@ async def main():
 
     embedder = OllamaEmbedder()
 
-    result = await embedder.embed([Chunk])
+    result = await embedder.embed([chunk])
 
     print(result)
 
+
+if __name__ == "__main__":
     asyncio.run(main())
