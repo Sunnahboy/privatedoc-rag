@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 768
     embedding_timeout: int = 30
     generation_model: str = "llama3.1"
+    embedding_max_concurrency: int = 8
 
     rag_chunk_size: int = 500
     rag_chunk_overlap: int = 100
