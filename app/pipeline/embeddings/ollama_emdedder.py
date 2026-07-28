@@ -14,13 +14,26 @@ class OllamaEmbedder(BaseEmbedder):
     Generates embeddings using a local Ollama model efficiently and concurrently.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        batch_size: int | None = None,
+        max_concurrency: int | None = None,
+    ) -> None:
         self.base_url = settings.ollama_url.strip("/")
         self.model = settings.embedding_model
         self.timeout = settings.embedding_timeout
-        # Maximum concurrent requests to Ollama
-        self.max_concurrency = settings.embedding_max_concurrency
-        # Persistent client to maintain connection pooling across requests
+
+        self.batch_size = (
+            batch_size if batch_size is not None else settings.embedding_batch_size
+        )
+
+        self.max_concurrency = (
+            max_concurrency
+            if max_concurrency is not None
+            else settings.embedding_max_concurrency
+        )
+
         self._client: httpx.AsyncClient | None = None
         self._semaphore = asyncio.Semaphore(self.max_concurrency)
 
@@ -35,58 +48,69 @@ class OllamaEmbedder(BaseEmbedder):
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
+    def _split_batches(
+        self,
+        chunks: list[Chunk],
+    ) -> list[list[Chunk]]:
+        """Split chunks into fixed-size batches."""
+        batch_size = self.batch_size
+
+        return [chunks[i : i + batch_size] for i in range(0, len(chunks), batch_size)]
+
     async def embed(self, chunks: list[Chunk]) -> list[EmbeddingResult]:
         """
-        Processes all chunks concurrently and maps them to EmbeddingResult objects,
+        Generate embeddings for all chunks,
+            -split batches
+            -run tasks
+            -combine results
         """
 
         if not chunks:
             return []
 
         # call all http requests concurrently using asyncio.gather
-        tasks = [self._embed_text(chunk.text) for chunk in chunks]
-        vectors = await asyncio.gather(*tasks)
+        batches = self._split_batches(chunks)
 
-        results: list[EmbeddingResult] = []
-        for chunk, vector in zip(chunks, vectors):
-            results.append(
-                EmbeddingResult(
-                    chunk_id=chunk.chunk_id,
-                    document_id=chunk.document_id,
-                    chunk_index=chunk.chunk_index,
-                    vector=vector,
-                    model_name=self.model,
-                    dimensions=len(vector),  # Vector returned is the source of truth
-                )
-            )
+        # create onee task per batch
+        tasks = [self._process_batch(batch) for batch in batches]
+        batch_vectors = await asyncio.gather(*tasks)
 
-        return results
+        return [result for batch in batch_vectors for result in batch]
 
-    async def _embed_text(
+    async def _embed_batch(
         self,
-        text: str,
-    ) -> list[float]:
-        """Generate an embedding for a single piece of text"""
+        texts: list[str],
+    ) -> list[list[float]]:
+        """
+        Generate an embedding for a single piece of text
+            -HTTP request only
+        """
+
         url = f"{self.base_url}/api/embed"
 
         payload = {
             "model": self.model,
-            "input": text,
+            "input": texts,
         }
         client = self._get_client()
 
         async with self._semaphore:
             try:
+                print(
+                    f"Sending batch: {len(texts)} texts, "
+                    f"{sum(len(text) for text in texts)} characters"
+                )
                 # connection pooling: to avoid constant TCP handshake
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 data = response.json()
 
-            except httpx.CloseError as exc:
+            except httpx.RequestError as exc:
                 raise EmbeddingResponseError("Failed to connect to ollama.") from exc
             except httpx.HTTPStatusError as exc:
+                detail = exc.response.text.strip() if exc.response is not None else ""
                 raise EmbeddingResponseError(
-                    f"Ollama API returned an error status code: {exc.response.status_code}"
+                    f"Ollama API returned {exc.response.status_code}: {detail}"
                 ) from exc
             except (httpx.HTTPError, ValueError) as exc:
                 raise EmbeddingResponseError(
@@ -104,4 +128,34 @@ class OllamaEmbedder(BaseEmbedder):
             raise EmbeddingResponseError(
                 "Invalid embedding response returned by ollama."
             )
-        return embeddings[0]
+
+        return embeddings
+
+    async def _process_batch(
+        self,
+        batch: list[Chunk],
+    ) -> list[EmbeddingResult]:
+        """
+        Process a single batch of chunks.
+            -extract text
+            -call Ollama
+            -build EmbeddingResult
+        """
+        texts = [chunk.text for chunk in batch]
+        vectors = await self._embed_batch(texts)
+
+        results: list[EmbeddingResult] = []
+
+        for chunk, vector in zip(batch, vectors):
+            results.append(
+                EmbeddingResult(
+                    chunk_id=chunk.chunk_id,
+                    document_id=chunk.document_id,
+                    chunk_index=chunk.chunk_index,
+                    vector=vector,
+                    model_name=self.model,
+                    dimensions=len(vector),
+                )
+            )
+        print(f"Processing batch {batch[0].chunk_index} - {batch[-1].chunk_index}")
+        return results
