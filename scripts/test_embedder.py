@@ -43,7 +43,7 @@ async def run_benchmark(num_chunks: int, concurrency: int):
     embedder = OllamaEmbedder(max_concurrency=concurrency)
 
     try:
-        # Small indicator so user knows it's working
+        #Small indicator I knows it's working
         print(f"Benchmarking: N={num_chunks}, Conc={concurrency}...", end="\r")
 
         start = time.perf_counter()

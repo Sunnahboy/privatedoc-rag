@@ -146,7 +146,7 @@ class OllamaEmbedder(BaseEmbedder):
 
         results: list[EmbeddingResult] = []
 
-        for chunk, vector in zip(batch, vectors):
+        for chunk, vector in zip(batch, vectors, strict=True):
             results.append(
                 EmbeddingResult(
                     chunk_id=chunk.chunk_id,
