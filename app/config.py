@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     embedding_timeout: int = 30
     generation_model: str = "llama3.1"
     embedding_max_concurrency: int = 8
+    qdrant_max_concurrent_requests:int =8
     embedding_batch_size: int = 64
     qdrant_batch_size: int = 64
 

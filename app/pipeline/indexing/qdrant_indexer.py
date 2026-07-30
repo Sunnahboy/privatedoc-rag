@@ -17,11 +17,15 @@ class QdrantIndexer(BaseIndexer):
         api_key: str | None = None,
         collection_name: str | None = None,
         batch_size: int | None = None,
+        max_concurrent_requests: int | None = None,
     ) -> None:
         self.url = url or settings.qdrant_url
         self.api_key = api_key or settings.qdrant_api_key
         self.collection_name = collection_name or settings.qdrant_collection_name
         self.batch_size = batch_size or settings.qdrant_batch_size
+        self.max_concurrent_requests = asyncio.Semaphore(
+            max_concurrent_requests or settings.qdrant_max_concurrent_requests
+        )
 
         self.client = AsyncQdrantClient(
             url=self.url,
@@ -46,6 +50,7 @@ class QdrantIndexer(BaseIndexer):
             await self.client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=VectorParams(
+                    size=vector_size,
                     distance=Distance.COSINE,
                 ),
             )
@@ -56,34 +61,35 @@ class QdrantIndexer(BaseIndexer):
 
     def _to_point(
         self,
-        embeddings: EmbeddingResult,
+        embedding: EmbeddingResult,
     ) -> PointStruct:
         return PointStruct(
-            id=str(embeddings.chunk_id),
-            vector=embeddings.vector,
+            id=str(embedding.chunk_id),
+            vector=embedding.vector,
             payload={
-                "document_id": str(embeddings.document_id),
-                "chunk_index": embeddings.chunk_index,
-                "model_name": embeddings.model_name,
+                "document_id": str(embedding.document_id),
+                "chunk_index": embedding.chunk_index,
+                "model_name": embedding.model_name,
             },
         )
 
     def _split_batches(
         self,
         points: list[PointStruct],
-        batch_size: int = settings.qdrant_batch_size,
     ) -> list[list[PointStruct]]:
-        return [points[i : i + batch_size] for i in range(0, len(points), batch_size)]
+        size = self.batch_size
+        return [points[i : i + size] for i in range(0, len(points), size)]
 
     async def _upsert_batch(
         self,
         batch: list[PointStruct],
     ) -> None:
-        await self.client.upsert(
-            collection_name=self.collection_name,
-            points=batch,
-            wait=True,
-        )
+        async with self.max_concurrent_requests:
+            await self.client.upsert(
+                collection_name=self.collection_name,
+                points=batch,
+                wait=True,
+            )
 
     async def index(
         self,
@@ -109,5 +115,5 @@ class QdrantIndexer(BaseIndexer):
             raise UpsertError(f"Failed to index {len(points)} points.") from exc
         return IndexingResult(
             indexed_count=len(points),
-            collection_name=self.collection_nam,
+            collection_name=self.collection_name,
         )
