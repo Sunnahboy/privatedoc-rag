@@ -1,13 +1,11 @@
 from app.config import settings
-from app.pipeline.embedding.models import EmbeddingResult
+from app.pipeline.embeddings.models import EmbeddingResult
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Distance, VectorParams,PointStruct
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from .exceptions import CollectionError,UpsertError
+from .exceptions import CollectionError, UpsertError
 from .interface import BaseIndexer
 from .models import IndexingResult
-from uiid import UIID
-
 
 
 class QdrantIndexer(BaseIndexer):
@@ -52,38 +50,44 @@ class QdrantIndexer(BaseIndexer):
                 f"Failed to ensure collection {self.collection_name}"
             ) from exc
 
+    def _to_point(
+        self,
+        embeddings: EmbeddingResult,
+    ) -> PointStruct:
+        return PointStruct(
+            id=str(embeddings.chunk_id),
+            vector=embeddings.vector,
+            payload={
+                "document_id": str(embeddings.document_id),
+                "chunk_index": embeddings.chunk_index,
+                "model_name": embeddings.model_name,
+            },
+        )
 
-
-        def _to_point(
-                self,
-                embedding:EmbeddingResult,
-
-        )->PointStruct:
-            return PointStruct(
-                id=str(embedding.chunk_id),
-                vector=embedding.vector,
-                payload={
-                    "document_id":str(embedding.document_id),
-                    "chunk_index":embedding.chunk_index,
-                    "model_name":embedding.model_name,
-                },
+    async def index(
+        self,
+        embeddings: list[EmbeddingResult],
+    ) -> IndexingResult:
+        if not embeddings:
+            return IndexingResult(
+                indexed_count=0,
+                collection_name=self.collection_name,
             )
 
-        async def index(
-            self,
-            embedding: list[EmbeddingResult],
-        ) -> IndexingResult:
-            if not embedding:
-                return IndexingResult(
-                    indexed_count=0,
-                    collection_name=self.collection_name,
-                )
+        await self.ensure_collection(
+            vector_size=embeddings[0].dimensions,
+        )
 
-            await self.ensure_collection(
-                vector_size=embedding[0].dimensions,
+        points = [self._to_point(embedding) for embedding in embeddings]
+        try:
+            await self.client.upsert(
+                collection_name=self.collection_name,
+                points=points,
+                wait=True,
             )
-
-            points = [
-                self._to_point(embedding)
-            ]
-            raise NotImplementedError
+        except Exception as exc:
+            raise UpsertError(f"Failed to index {len(points)} points.") from exc
+        return IndexingResult(
+            indexed_count=len(points),
+            collection_name=self.collection_nam,
+        )
