@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     generation_model: str = "llama3.1"
     embedding_max_concurrency: int = 8
     embedding_batch_size: int = 64
+    qdrant_batch_size: int = 64
 
     rag_chunk_size: int = 500
     rag_chunk_overlap: int = 100

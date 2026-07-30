@@ -16,10 +16,12 @@ class QdrantIndexer(BaseIndexer):
         url: str | None = None,
         api_key: str | None = None,
         collection_name: str | None = None,
+        batch_size: int | None = None,
     ) -> None:
         self.url = url or settings.qdrant_url
         self.api_key = api_key or settings.qdrant_api_key
         self.collection_name = collection_name or settings.qdrant_collection_name
+        self.batch_size = batch_size or settings.qdrant_batch_size
 
         self.client = AsyncQdrantClient(
             url=self.url,
@@ -69,7 +71,7 @@ class QdrantIndexer(BaseIndexer):
     def _split_batches(
         self,
         points: list[PointStruct],
-        batch_size: int = 64,
+        batch_size: int = settings.qdrant_batch_size,
     ) -> list[list[PointStruct]]:
         return [points[i : i + batch_size] for i in range(0, len(points), batch_size)]
 
