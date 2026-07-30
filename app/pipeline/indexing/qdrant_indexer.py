@@ -1,3 +1,5 @@
+import asyncio
+
 from app.config import settings
 from app.pipeline.embeddings.models import EmbeddingResult
 from qdrant_client import AsyncQdrantClient
@@ -64,6 +66,23 @@ class QdrantIndexer(BaseIndexer):
             },
         )
 
+    def _split_batches(
+        self,
+        points: list[PointStruct],
+        batch_size: int = 64,
+    ) -> list[list[PointStruct]]:
+        return [points[i : i + batch_size] for i in range(0, len(points), batch_size)]
+
+    async def _upsert_batch(
+        self,
+        batch: list[PointStruct],
+    ) -> None:
+        await self.client.upsert(
+            collection_name=self.collection_name,
+            points=batch,
+            wait=True,
+        )
+
     async def index(
         self,
         embeddings: list[EmbeddingResult],
@@ -79,12 +98,11 @@ class QdrantIndexer(BaseIndexer):
         )
 
         points = [self._to_point(embedding) for embedding in embeddings]
+        batches = self._split_batches(points)
+
+        tasks = [self._upsert_batch(batch) for batch in batches]
         try:
-            await self.client.upsert(
-                collection_name=self.collection_name,
-                points=points,
-                wait=True,
-            )
+            await asyncio.gather(*tasks)
         except Exception as exc:
             raise UpsertError(f"Failed to index {len(points)} points.") from exc
         return IndexingResult(
