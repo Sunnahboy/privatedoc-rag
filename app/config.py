@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     # future RAG services
     qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str | None = None
+    qdrant_collection_name: str = "documents"
     ollama_url: str = "http://localhost:11434"
     embedding_provider: str = "ollama"
     embedding_model: str = "nomic-embed-text"
