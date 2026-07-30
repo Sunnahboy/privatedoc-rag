@@ -41,16 +41,28 @@ async def main():
     indexer = QdrantIndexer()
 
     start = time.perf_counter()
-    result = asyncio.run(indexer.index(embeddings))
+    result = await indexer.index(embeddings)
     elapsed = time.perf_counter() - start
 
-    print(f"Indexed {result.indexed_count} embeddings in {elapsed:.2f} seconds")
-    print(f"Throughput: {result.indexed_count / elapsed:.2f} vectors/second")
+    print("\n" + "=" * 55)
+    print("           QDRANT INDEXING BENCHMARK")
+    print("=" * 55)
+    print(f"{'Metric':<25}{'Value'}")
+    print("-" * 55)
+    print(f"{'Embeddings':<25}{result.indexed_count}")
+    print(f"{'Collection':<25}{result.collection_name}")
+    print(f"{'Time':<25}{elapsed:.3f} s")
+    print(f"{'Throughput':<25}{result.indexed_count / elapsed:.2f} vectors/s")
 
     if result.indexed_count:
-        print(f"Latency: {(elapsed / result.indexed_count) * 1000:.2f} ms/vector")
+        print(
+            f"{'Latency':<25}"
+            f"{(elapsed / result.indexed_count) * 1000:.2f} ms/vector"
+        )
     else:
-        print("Latency: N/A")
+        print(f"{'Latency':<25}N/A")
+
+    print("=" * 55)
 
     await indexer.close()
 
