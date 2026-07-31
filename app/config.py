@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 64
     qdrant_batch_size: int = 64
 
+    top_k_search:int = 5
     rag_chunk_size: int = 500
     rag_chunk_overlap: int = 100
     model_config = SettingsConfigDict(
