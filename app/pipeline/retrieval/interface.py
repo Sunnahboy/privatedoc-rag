@@ -8,7 +8,7 @@ class BaseRetriever(ABC):
     async def retrieve(
         self,
         query: str,
-        top_k: int,
+        top_k: int | None  = None
     ) -> RetrievalResult:
         """
         Retrieve relevant chunks.
