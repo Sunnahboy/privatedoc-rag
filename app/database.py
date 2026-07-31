@@ -15,8 +15,6 @@ class Base(DeclarativeBase):
         -Base.metadata is used to create tables during development.
     """
 
-    pass
-
 
 engine = create_async_engine(settings.database_url, echo=settings.database_echo)
 
@@ -46,7 +44,7 @@ async def init_db() -> None:
     - Replace this with Alembic migrations.
     - For now, it keeps Milestone 2 simple and runnable.
     """
-    #sqlAlchemy registers them before create_all()
+    # sqlAlchemy registers them before create_all()
 
     from app.models.document import Document  # noqa: F401
 
