@@ -11,5 +11,5 @@ class RetrievedChunk:
 
 
 @dataclass(slot=True)
-class RetrieveResult:
+class RetrievalResult:
     chunks: list[RetrievedChunk]

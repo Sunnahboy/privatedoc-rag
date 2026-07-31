@@ -1,8 +1,9 @@
 from app.config import settings
 from qdrant_client import AsyncQdrantClient
 
+from .exceptions import RetrievalError
 from .interface import BaseRetriever
-from .models import RetrieveResult
+from .models import RetrievalResult
 
 
 class QdrantRetriever(BaseRetriever):
@@ -13,7 +14,7 @@ class QdrantRetriever(BaseRetriever):
         collection_name: str | None = None,
     ) -> None:
         self.url = url or settings.qdrant_url
-        self.api_key = api_key or settings.qdrant_url
+        self.api_key = api_key or settings.qdrant_api_key
         self.collection_name = collection_name or settings.qdrant_collection_name
 
         self.client = AsyncQdrantClient(
@@ -21,9 +22,23 @@ class QdrantRetriever(BaseRetriever):
             api_key=self.api_key,
         )
 
+    async def __aenter__(self) -> "QdrantRetriever":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
     async def close(self) -> None:
+        """Close underlying connections"""
         await self.client.close()
 
-    async def retrieve(
-        self, query: str, top_k: int | None = None
-    ) -> RetrieveResult: ...
+    async def retrieve(self, query: str, top_k: int | None = None) -> RetrievalResult:
+        """
+        Retrieve the top-k most relevant chunks for a query.
+        """
+
+        limit = top_k or settings.top_k_search
+        if limit <= 0:
+            raise RetrievalError("top_k must be greater than zero")
+        if not query.strip():
+            raise RetrievalError("Query cannot be empty")
