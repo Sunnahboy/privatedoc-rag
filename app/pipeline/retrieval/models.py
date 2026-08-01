@@ -10,6 +10,6 @@ class RetrievedChunk:
     score: float
 
 
-@dataclass(slot=True)
+@dataclass(slots=True)
 class RetrievalResult:
     chunks: list[RetrievedChunk]
