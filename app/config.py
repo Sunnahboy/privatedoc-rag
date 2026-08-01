@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     qdrant_max_concurrent_requests:int =8
     embedding_batch_size: int = 64
     qdrant_batch_size: int = 64
+    retrieval_score_threshold: float = 0.5
 
     top_k_search:int = 5
     rag_chunk_size: int = 500
