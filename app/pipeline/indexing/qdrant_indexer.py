@@ -1,4 +1,5 @@
 import asyncio
+from typing import Self
 
 from app.config import settings
 from app.pipeline.embeddings.models import EmbeddingResult
@@ -59,6 +60,12 @@ class QdrantIndexer(BaseIndexer):
                 f"Failed to ensure collection {self.collection_name}"
             ) from exc
 
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
     def _to_point(
         self,
         embedding: EmbeddingResult,
@@ -69,6 +76,7 @@ class QdrantIndexer(BaseIndexer):
             payload={
                 "document_id": str(embedding.document_id),
                 "chunk_index": embedding.chunk_index,
+                "text": embedding.text,
                 "model_name": embedding.model_name,
             },
         )
