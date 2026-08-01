@@ -15,10 +15,23 @@ async def main():
                 chunk_id=str(uuid4()),
                 document_id="doc1",
                 chunk_index=i,
-                text=f"This is chunk {i}",
+                text=f"Document 1 - Chunk {i}",
                 vector=[0.1] * 768,
                 model_name="nomic-embed-text",
                 dimensions=768,
+            )
+        )
+    for i in range(5):
+        embeddings.append(
+            EmbeddingResult(
+                chunk_id=str(uuid4()),
+                document_id="doc2",
+                chunk_index=i,
+                text=f"Document 2 - Chunk {i}",
+                vector=[0.2] * 768,
+                model_name="nomic-embed-text",
+                dimensions=768,
+
             )
         )
 
@@ -31,8 +44,9 @@ async def main():
 
     async with QdrantRetriever() as retriever:
         response = await retriever.retrieve(
-            query="What is artificial intelligence?",
+            query="Document",
             top_k=3,
+            document_id="doc2"
         )
 
         print(response)
