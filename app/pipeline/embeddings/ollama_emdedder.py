@@ -157,6 +157,7 @@ class OllamaEmbedder(BaseEmbedder):
                     chunk_id=chunk.chunk_id,
                     document_id=chunk.document_id,
                     chunk_index=chunk.chunk_index,
+                    text=chunk.text,
                     vector=vector,
                     model_name=self.model,
                     dimensions=len(vector),

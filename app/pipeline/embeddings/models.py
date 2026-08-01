@@ -12,6 +12,7 @@ class EmbeddingResult:
     chunk_id: str
     document_id: str
     chunk_index: int
+    text:str
     vector: list[float]
     model_name: str
     dimensions: int
