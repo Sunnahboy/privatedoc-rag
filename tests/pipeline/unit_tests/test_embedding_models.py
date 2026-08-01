@@ -1,4 +1,3 @@
-
 from app.pipeline.embeddings.models import EmbeddingResult
 
 
@@ -7,6 +6,7 @@ def test_embedding_result_creation():
         chunk_id="chunk1",
         document_id="doc1",
         chunk_index=0,
+        text="Hello world",
         vector=[0.1, 0.2, 0.3],
         model_name="nomic-embed-text",
         dimensions=3,
@@ -14,4 +14,5 @@ def test_embedding_result_creation():
 
     assert result.chunk_id == "chunk1"
     assert result.document_id == "doc1"
+    assert result.text == "Hello world"
     assert len(result.vector) == 3
