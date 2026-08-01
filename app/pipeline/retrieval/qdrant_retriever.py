@@ -1,4 +1,6 @@
 from app.config import settings
+from app.pipeline.embeddings.base import BaseEmbedder
+from app.pipeline.embeddings.ollama_emdedder import OllamaEmbedder
 from qdrant_client import AsyncQdrantClient
 
 from .exceptions import RetrievalError
@@ -12,10 +14,12 @@ class QdrantRetriever(BaseRetriever):
         url: str | None = None,
         api_key: str | None = None,
         collection_name: str | None = None,
+        embedder: BaseEmbedder | None = None,
     ) -> None:
         self.url = url or settings.qdrant_url
         self.api_key = api_key or settings.qdrant_api_key
         self.collection_name = collection_name or settings.qdrant_collection_name
+        self.embedder = embedder or OllamaEmbedder()
 
         self.client = AsyncQdrantClient(
             url=self.url,
@@ -27,6 +31,12 @@ class QdrantRetriever(BaseRetriever):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
+
+    async def _embed_query(
+        self,
+        query: str,
+    ) -> list[float]:
+        """Convert a user query into an embedding vector."""
 
     async def close(self) -> None:
         """Close underlying connections"""
