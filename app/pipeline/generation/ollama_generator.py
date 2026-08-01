@@ -36,7 +36,7 @@ class OllamaGenerator(BaseGenerator):
         self.client = httpx.AsyncClient(
             timeout=self.timeout,
         )
-        print(f"Model: {self.model}")
+        
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -60,7 +60,7 @@ class OllamaGenerator(BaseGenerator):
                 f"{self.base_url}/api/generate",
                 json=payload,
             )
-            print(f"{self.base_url}/api/generate")
+            
 
             response.raise_for_status()
             data = response.json()
