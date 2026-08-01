@@ -3,7 +3,7 @@ from app.pipeline.embeddings.base import BaseEmbedder
 from app.pipeline.embeddings.ollama_emdedder import OllamaEmbedder
 from qdrant_client import AsyncQdrantClient
 
-from .exceptions import RetrievalError
+from .exceptions import RetrievalError, SearchError
 from .interface import BaseRetriever
 from .models import RetrievalResult
 
@@ -53,3 +53,16 @@ class QdrantRetriever(BaseRetriever):
             raise RetrievalError("top_k must be greater than zero")
         if not query.strip():
             raise RetrievalError("Query cannot be empty")
+        query_vector = await self._embed_query(query)
+
+        try:
+            response = await self.client.query_points(
+                collection_name=self.collection_name,
+                query=query_vector,
+                limit=limit,
+                with_payload=True,
+            )
+            print(response)
+
+        except Exception as exc:
+            raise SearchError("Vector search failed.") from exc
