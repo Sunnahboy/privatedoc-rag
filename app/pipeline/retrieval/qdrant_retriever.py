@@ -87,17 +87,31 @@ class QdrantRetriever(BaseRetriever):
                 with_payload=True,
             )
 
-            chunks = [
-                RetrievedChunk(
-                    chunk_id=str(point.id),
-                    document_id=point.payload["document_id"],
-                    chunk_index=point.payload["chunk_index"],
-                    text=point.payload["text"],
-                    score=point.score,
+            chunks = []
+
+            for point in response.points:
+                if point.score < settings.retrieval_score_threshold:
+                    continue
+                payload = point.payload
+                chunks.append(
+                    RetrievedChunk(
+                        chunk_id=str(point.id),
+                        document_id=payload["document_id"],
+                        chunk_index=payload["chunk_index"],
+                        text=payload["text"],
+                        score=point.score,
+                    )
                 )
-                for point in response.points
-            ]
         except Exception as exc:
             raise SearchError("Vector search failed.") from exc
+        if not chunks:
+            return RetrievalResult(
+                chunks=[],
+                found=False,
+                message="No relevant chunks found above the similarity threshold.",
+            )
 
-        return RetrievalResult(chunks=chunks)
+        return RetrievalResult(
+            chunks=chunks,
+            found=True,
+        )
