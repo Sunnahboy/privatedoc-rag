@@ -8,7 +8,7 @@ class BaseRetriever(ABC):
     async def retrieve(
         self,
         query: str,
-        top_k: int | None  = None,
+        top_k: int | None = None,
         document_id: str | None = None,
     ) -> RetrievalResult:
         """
