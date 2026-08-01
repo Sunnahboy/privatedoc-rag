@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
 
-from app.pipeline.retrieval.models import RetrievalChunk
+from app.pipeline.retrieval.models import RetrievedChunk
 
-from .models import GenerationResult
+from .models import GenerateResult
 
 
-class BaseGenetrator(ABC):
+class BaseGenerator(ABC):
     @abstractmethod
     async def generate(
         self,
         question: str,
-        contact: list[RetrievalChunk],
-    ) -> GenerationResult: ...
+        contact: list[RetrievedChunk],
+    ) -> GenerateResult: ...
