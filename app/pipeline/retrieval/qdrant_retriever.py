@@ -1,3 +1,5 @@
+from typing import Self
+
 from app.config import settings
 from app.pipeline.embeddings.base import BaseEmbedder
 from app.pipeline.embeddings.ollama_emdedder import OllamaEmbedder
@@ -5,7 +7,7 @@ from qdrant_client import AsyncQdrantClient
 
 from .exceptions import RetrievalError, SearchError
 from .interface import BaseRetriever
-from .models import RetrievalResult
+from .models import RetrievalResult, RetrievedChunk
 
 
 class QdrantRetriever(BaseRetriever):
@@ -26,7 +28,7 @@ class QdrantRetriever(BaseRetriever):
             api_key=self.api_key,
         )
 
-    async def __aenter__(self) -> "QdrantRetriever":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -62,7 +64,18 @@ class QdrantRetriever(BaseRetriever):
                 limit=limit,
                 with_payload=True,
             )
-            print(response)
 
+            chunks = [
+                RetrievedChunk(
+                    chunk_id=str(point.id),
+                    document_id=point.payload["document_id"],
+                    chunk_index=point.payload["chunk_index"],
+                    text=point.payload["text"],
+                    score=point.score,
+                )
+                for point in response.points
+            ]
         except Exception as exc:
             raise SearchError("Vector search failed.") from exc
+
+        return RetrievalResult(chunks=chunks)
