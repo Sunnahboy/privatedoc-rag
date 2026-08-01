@@ -1,7 +1,10 @@
 import asyncio
+import time
 
 from app.pipeline.generation.ollama_generator import OllamaGenerator
 from app.pipeline.retrieval.models import RetrievedChunk
+
+QUESTION = "What is RAG?"
 
 
 async def main():
@@ -25,19 +28,56 @@ async def main():
     generator = OllamaGenerator()
 
     try:
-        result = await generator.generate(
-            question="What is RAG?",
+        # ---------------- Prompt ----------------
+        prompt_start = time.perf_counter()
+
+        prompt = generator.prompt_builder.build(
+            question=QUESTION,
             context=context,
         )
 
-        print("=" * 50)
+        prompt_time = time.perf_counter() - prompt_start
+
+        # ---------------- Generation ----------------
+        generation_start = time.perf_counter()
+
+        result = await generator.generate(
+            question=QUESTION,
+            context=context,
+        )
+
+        generation_time = time.perf_counter() - generation_start
+
+        total_time = prompt_time + generation_time
+
+        # ---------------- Output ----------------
+        print("=" * 60)
         print("ANSWER")
-        print("=" * 50)
+        print("=" * 60)
         print(result.answer)
 
         print("\nCITATIONS")
         for chunk in result.citations:
-            print(f"Chunk {chunk.chunk_index}: {chunk.text}")
+            print(f"• Chunk {chunk.chunk_index}: {chunk.text}")
+
+        print("\n" + "=" * 60)
+        print("GENERATION BENCHMARK")
+        print("=" * 60)
+        print(f"Model              : {generator.model}")
+        print(f"Context Chunks     : {len(context)}")
+        print(f"Prompt Length      : {len(prompt)} chars")
+        print(f"Answer Length      : {len(result.answer)} chars")
+        print("-" * 60)
+        print(f"Prompt Build       : {prompt_time:.4f} s")
+        print(f"Inference          : {generation_time:.4f} s")
+        print(f"Total Time         : {total_time:.4f} s")
+        print("-" * 60)
+        print(f"Prompt Tokens   : {result.prompt_tokens}")
+        print(f"Output Tokens   : {result.completion_tokens}")
+        print(
+            f"Inference Speed : {result.completion_tokens / generation_time:.2f} tokens/sec"
+        )
+        print("=" * 60)
 
     finally:
         await generator.close()
