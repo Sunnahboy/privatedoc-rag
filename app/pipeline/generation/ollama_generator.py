@@ -36,6 +36,7 @@ class OllamaGenerator(BaseGenerator):
         self.client = httpx.AsyncClient(
             timeout=self.timeout,
         )
+        print(f"Model: {self.model}")
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -68,9 +69,10 @@ class OllamaGenerator(BaseGenerator):
 
         except httpx.HTTPError as exc:
             raise GenerationError("Failed to communicate with Ollama.") from exc
-        
 
         return GenerateResult(
             answer=data["response"],
             citations=context,
+            prompt_tokens=data["prompt_eval_count"],
+            completion_tokens=data["eval_count"],
         )

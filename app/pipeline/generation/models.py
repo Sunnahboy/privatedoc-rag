@@ -7,3 +7,5 @@ from app.pipeline.retrieval.models import RetrievedChunk
 class GenerateResult:
     answer: str
     citations: list[RetrievedChunk]
+    prompt_tokens: int
+    completion_tokens: int
