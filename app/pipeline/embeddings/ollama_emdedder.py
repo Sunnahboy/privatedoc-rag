@@ -77,6 +77,11 @@ class OllamaEmbedder(BaseEmbedder):
 
         return [result for batch in batch_vectors for result in batch]
 
+    async def embed_query(self, query: str) -> list[float]:
+        """Generate user query embeddings"""
+        vectors = await self._embed_batch([query])
+        return vectors[0]
+
     async def _embed_batch(
         self,
         texts: list[str],
@@ -152,6 +157,7 @@ class OllamaEmbedder(BaseEmbedder):
                     chunk_id=chunk.chunk_id,
                     document_id=chunk.document_id,
                     chunk_index=chunk.chunk_index,
+                    text=chunk.text,
                     vector=vector,
                     model_name=self.model,
                     dimensions=len(vector),

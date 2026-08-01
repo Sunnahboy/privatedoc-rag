@@ -31,3 +31,8 @@ class BaseEmbedder(ABC):
 
         """
         ...
+
+    @abstractmethod
+    async def embed_query(self,query:str)->list[float]:
+        """Generate embeddings for  the user query"""
+        ...
