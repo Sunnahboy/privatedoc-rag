@@ -37,6 +37,7 @@ class QdrantRetriever(BaseRetriever):
         query: str,
     ) -> list[float]:
         """Convert a user query into an embedding vector."""
+        return await self.embedder.embed_query(query)
 
     async def close(self) -> None:
         """Close underlying connections"""
