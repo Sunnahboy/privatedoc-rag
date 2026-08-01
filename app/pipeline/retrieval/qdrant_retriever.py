@@ -4,6 +4,7 @@ from app.config import settings
 from app.pipeline.embeddings.base import BaseEmbedder
 from app.pipeline.embeddings.ollama_emdedder import OllamaEmbedder
 from qdrant_client import AsyncQdrantClient
+from qdrant_client.models import FieldCondition, Filter, MatchValue
 
 from .exceptions import RetrievalError, SearchError
 from .interface import BaseRetriever
@@ -52,7 +53,9 @@ class QdrantRetriever(BaseRetriever):
     ) -> list[float]:
         """Convert a user query into an embedding vector."""
 
-    async def retrieve(self, query: str, top_k: int | None = None) -> RetrievalResult:
+    async def retrieve(
+        self, query: str, top_k: int | None = None, document_id: str | None = None
+    ) -> RetrievalResult:
         """
         Retrieve the top-k most relevant chunks for a query.
         """
@@ -65,24 +68,50 @@ class QdrantRetriever(BaseRetriever):
         query_vector = await self._embed_query(query)
 
         try:
+            query_filter = None
+
+            if document_id:
+                query_filter = Filter(
+                    must=[
+                        FieldCondition(
+                            key="document_id",
+                            match=MatchValue(value=document_id),
+                        )
+                    ]
+                )
             response = await self.client.query_points(
                 collection_name=self.collection_name,
                 query=query_vector,
+                query_filter=query_filter,
                 limit=limit,
                 with_payload=True,
             )
 
-            chunks = [
-                RetrievedChunk(
-                    chunk_id=str(point.id),
-                    document_id=point.payload["document_id"],
-                    chunk_index=point.payload["chunk_index"],
-                    text=point.payload["text"],
-                    score=point.score,
+            chunks = []
+
+            for point in response.points:
+                if point.score < settings.retrieval_score_threshold:
+                    continue
+                payload = point.payload
+                chunks.append(
+                    RetrievedChunk(
+                        chunk_id=str(point.id),
+                        document_id=payload["document_id"],
+                        chunk_index=payload["chunk_index"],
+                        text=payload["text"],
+                        score=point.score,
+                    )
                 )
-                for point in response.points
-            ]
         except Exception as exc:
             raise SearchError("Vector search failed.") from exc
+        if not chunks:
+            return RetrievalResult(
+                chunks=[],
+                found=False,
+                message="No relevant chunks found above the similarity threshold.",
+            )
 
-        return RetrievalResult(chunks=chunks)
+        return RetrievalResult(
+            chunks=chunks,
+            found=True,
+        )

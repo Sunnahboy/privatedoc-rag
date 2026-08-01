@@ -13,3 +13,5 @@ class RetrievedChunk:
 @dataclass(slots=True)
 class RetrievalResult:
     chunks: list[RetrievedChunk]
+    found: bool
+    message: str | None = None
