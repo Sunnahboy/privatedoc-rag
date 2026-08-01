@@ -1,6 +1,6 @@
-name: Python CI
+name: Python CI #Workflow
 
-on:
+on:             #Triggers
   push:
     branches:
       - main
@@ -9,12 +9,34 @@ on:
   pull_request:
     branches:
       - main
-jobs:
-  tests:
+jobs:             #Jobs
+  tests:          #Tests
     runs-on: ubuntu-latest
   steps:
   - name: Checkout repository
     uses: actions/checkout@v4
+
+  - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: "pip"
+
+  - name: Install uv
+    uses: astral-sh/setup-uv@v3
+
+  - name: Install dependencies
+    run: uv sync
+  - name: Lint with Ruff
+    run: uv run ruff check .
+  - name: Check formatting with Black
+    run: uv run black --check .
+  - name: Run tests
+    run: uv run pytest
+
+
+
+
 
 
 
