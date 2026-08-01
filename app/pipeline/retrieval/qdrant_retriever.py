@@ -27,6 +27,7 @@ class QdrantRetriever(BaseRetriever):
             url=self.url,
             api_key=self.api_key,
         )
+        self.embedder = embedder or OllamaEmbedder()
 
     async def __aenter__(self) -> Self:
         return self
@@ -44,6 +45,12 @@ class QdrantRetriever(BaseRetriever):
     async def close(self) -> None:
         """Close underlying connections"""
         await self.client.close()
+
+    async def _embed_query(
+        self,
+        query: str,
+    ) -> list[float]:
+        """Convert a user query into an embedding vector."""
 
     async def retrieve(self, query: str, top_k: int | None = None) -> RetrievalResult:
         """
