@@ -37,14 +37,15 @@ class Settings(BaseSettings):
     embedding_model: str = "nomic-embed-text"
     embedding_dimensions: int = 768
     embedding_timeout: int = 30
-    generation_model: str = "llama3.1"
+    generation_model: str = "llama3.1:8b"
     embedding_max_concurrency: int = 8
-    qdrant_max_concurrent_requests:int =8
+    qdrant_max_concurrent_requests: int = 8
     embedding_batch_size: int = 64
     qdrant_batch_size: int = 64
     retrieval_score_threshold: float = 0.5
+    generation_timeout: int = 2
 
-    top_k_search:int = 5
+    top_k_search: int = 5
     rag_chunk_size: int = 500
     rag_chunk_overlap: int = 100
     model_config = SettingsConfigDict(
