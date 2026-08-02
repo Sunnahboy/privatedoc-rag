@@ -1,0 +1,10 @@
+from abc import ABC, abstractmethod
+
+
+class BaseIngestionPipeline(ABC):
+    @abstractmethod
+    async def ingest(
+        self,
+        document_id: str,
+        files_path: str,
+    ): ...

@@ -5,7 +5,7 @@ import time
 import uuid
 
 from app.pipeline.chunking.models import Chunk
-from app.pipeline.embeddings.ollama_emdedder import OllamaEmbedder
+from app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
 
 
 def generate_random_text(min_words=50, max_words=150):
@@ -43,7 +43,7 @@ async def run_benchmark(num_chunks: int, concurrency: int):
     embedder = OllamaEmbedder(max_concurrency=concurrency)
 
     try:
-        #Small indicator I knows it's working
+        # Small indicator I knows it's working
         print(f"Benchmarking: N={num_chunks}, Conc={concurrency}...", end="\r")
 
         start = time.perf_counter()
