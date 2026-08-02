@@ -16,7 +16,7 @@ from app.services.document_service import (
     save_uploaded_document,
 )
 
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/document", tags=["Documents"])
 
@@ -71,7 +71,7 @@ async def upload_document(
     except HTTPException:
         raise  # silently swallow the error
     except Exception as exc:
-        logger.exception("unexpected document upload failure %s", exc)
+        logger.exception("unexpected document upload failure %s",)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unexpected error while uploading document.",
@@ -128,7 +128,7 @@ async def delete_document(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("Unexpected document delete failure: %s", exc)
+        logger.exception("Unexpected document delete failure: %s")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unexpected error while deleting document.",
