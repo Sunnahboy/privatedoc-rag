@@ -3,6 +3,7 @@ from pathlib import Path
 import aiofiles
 from app.config import settings
 from app.models.document import Document
+from app.pipeline.ingestion.pipeline import IngestionPipeline
 from app.schemas.document_schema import (
     DocumentDeleteResponse,
     DocumentListItem,
@@ -97,7 +98,7 @@ async def save_uploaded_document(
     try:
         async with aiofiles.open(saved_path, "wb") as out_file:
             while True:
-                chunk = await file.read(settings.CHUNK_SIZE_BYTES)
+                chunk = await file.read(settings.file_stream_chunk_size_bytes)
                 if not chunk:
                     break
                 total_size += len(chunk)
@@ -130,7 +131,7 @@ async def save_uploaded_document(
                 file_size_bytes=total_size,
                 storage_provider="local",
                 storage_key=stored_filename,
-                status="uploaded",
+                status="processing",
                 total_pages=0,
                 total_chunks=0,
             )
@@ -138,6 +139,12 @@ async def save_uploaded_document(
             db.add(document)
             await db.commit()
             await db.refresh(document)
+
+            await _process_document(
+                document=document,
+                saved_path=saved_path,
+                db=db,
+            )
             return _document_to_upload_response(document)
 
     except HTTPException:
@@ -150,6 +157,35 @@ async def save_uploaded_document(
 
     finally:
         await file.close()
+
+
+async def _process_document(
+    document: Document,
+    saved_path: Path,
+    db: AsyncSession,
+) -> None:
+    """Execute the ingestion pipeline and update document status."""
+    pipeline = IngestionPipeline()
+
+    try:
+        result = await pipeline.ingest(
+            document_id=document.id,
+            file_path=str(saved_path),
+        )
+        document.status = "indexed"
+        document.total_chunks = result.total_chunks
+        document.total_pages = result.total_pages
+    except Exception:
+        await db.rollback()
+        document.status = "failed"
+        await db.commit()
+        await db.refresh(document)
+        raise
+    else:
+        await db.commit()
+        await db.refresh(document)
+    finally:
+        await pipeline.close()
 
 
 async def list_documents(db: AsyncSession) -> list[DocumentListItem]:
