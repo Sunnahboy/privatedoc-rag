@@ -2,21 +2,21 @@ class IngestionError(Exception):
     """Base ingestion pipeline exception."""
 
 
-class ExtractionStageError(IngestionError):
+class ExtractionError(IngestionError):
     """Extraction stage failed."""
 
 
-class CleaningStageError(IngestionError):
+class CleaningError(IngestionError):
     """Cleaning stage failed."""
 
 
-class ChunkingStageError(IngestionError):
+class ChunkingError(IngestionError):
     """Chunking stage failed."""
 
 
-class EmbeddingStageError(IngestionError):
+class EmbeddingError(IngestionError):
     """Embedding stage failed."""
 
 
-class IndexingStageError(IngestionError):
+class IndexingError(IngestionError):
     """Indexing stage failed."""

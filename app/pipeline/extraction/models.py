@@ -14,5 +14,5 @@ class ExtractionResult:
     """
 
     text: str
-    page_count: int
+    total_pages: int
     metadata: dict

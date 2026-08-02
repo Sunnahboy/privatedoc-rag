@@ -11,7 +11,6 @@ from app.pipeline.embeddings.base import BaseEmbedder
 from app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
 from app.pipeline.extraction.factory import ExtractorFactory
 from app.pipeline.indexing.interface import BaseIndexer
-from app.pipeline.indexing.models import IndexingResult
 from app.pipeline.indexing.qdrant_indexer import QdrantIndexer
 
 from .base import BaseIngestionPipeline
@@ -24,6 +23,7 @@ from .exceptions import (
     IngestionError,
 )
 from .logger import IngestionLogger
+from .models import IngestionResult
 
 
 @dataclass
@@ -52,7 +52,7 @@ class IngestionPipeline(BaseIngestionPipeline):
         self,
         document_id: str,
         file_path: str,
-    ) -> IndexingResult:
+    ) -> IngestionResult:
         if not document_id:
             raise IngestionError("Document ID cannot be empty.")
         if not file_path:
@@ -123,7 +123,11 @@ class IngestionPipeline(BaseIngestionPipeline):
                 total=benchmark.total_elapsed,
                 chunks=benchmark.chunk_count,
             )
-            return indexing_result
+            return IngestionResult(
+                indexing=indexing_result,
+                total_chunks=benchmark.chunk_count,
+                total_pages=extraction.total_pages,
+            )
 
         except IngestionError as exc:
             IngestionLogger.error(f"Ingestion failed for doc {document_id}: {exc}")

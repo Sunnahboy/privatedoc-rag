@@ -47,12 +47,6 @@ class QdrantRetriever(BaseRetriever):
         """Close underlying connections"""
         await self.client.close()
 
-    async def _embed_query(
-        self,
-        query: str,
-    ) -> list[float]:
-        """Convert a user query into an embedding vector."""
-
     async def retrieve(
         self, query: str, top_k: int | None = None, document_id: str | None = None
     ) -> RetrievalResult:

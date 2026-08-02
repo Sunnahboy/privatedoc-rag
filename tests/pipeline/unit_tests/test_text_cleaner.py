@@ -14,7 +14,7 @@ async def test_removes_extra_blank_lines(cleaner):
 
     extraction = ExtractionResult(
         text="Hello\n\n\n\nWorld",
-        page_count=1,
+        total_pages=1,
         metadata={},
     )
 
@@ -28,7 +28,7 @@ async def test_clean_text_unchanged(cleaner):
 
     extraction = ExtractionResult(
         text="Hello\n\nWorld",
-        page_count=1,
+        total_pages=1,
         metadata={},
     )
 
@@ -42,7 +42,7 @@ async def test_empty_text(cleaner):
 
     extraction = ExtractionResult(
         text="",
-        page_count=1,
+        total_pages=1,
         metadata={},
     )
 
@@ -54,6 +54,6 @@ async def test_empty_text(cleaner):
 @pytest.mark.asyncio
 async def test_only_newlines(cleaner):
     """Ensures a string of pure newlines collapses safely."""
-    extraction = ExtractionResult(text="\n\n\n\n", page_count=1, metadata={})
+    extraction = ExtractionResult(text="\n\n\n\n", total_pages=1, metadata={})
     result = await cleaner.clean(extraction)
     assert result.text == "\n\n"

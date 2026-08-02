@@ -23,7 +23,7 @@ class PPTExtractor(BaseExtractor):
 
         return ExtractionResult(
             text="\n".join(slides),
-            page_count=len(presentation.slides),
+            total_pages=len(presentation.slides),
             metadata={
                 "slides": len(presentation.slides),
             },
