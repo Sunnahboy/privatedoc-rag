@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+from .models import IngestionResult
+
 
 class BaseIngestionPipeline(ABC):
     @abstractmethod
@@ -7,4 +9,4 @@ class BaseIngestionPipeline(ABC):
         self,
         document_id: str,
         files_path: str,
-    ): ...
+    ) -> IngestionResult: ...
