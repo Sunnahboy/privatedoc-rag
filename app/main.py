@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.document import router as documents_router
 from app.api.health import router as health_router
+from app.api.rag_router import router as rag_router
 from app.config import settings
 from app.database import init_db
 from app.utils.logging_utils import configure_logging
@@ -46,12 +47,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Self-hosted RAG system using local LLM inference, vector search, and source ",
+    description="Self-hosted RAG system using local LLM inference, "
+    "vector search, and  grounded responses with citations.",
     lifespan=lifespan,
 )
 
 # cors allows the frontend to call the backend
 app.add_middleware(
+    # later change to i.e "http://localhost:xx",
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -61,6 +64,7 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(documents_router)
+app.include_router(rag_router)
 
 
 @app.get("/")
@@ -76,4 +80,5 @@ def root() -> dict:
         "docs": "/docs",
         "health": "/health",
         "documents": "/document",
+        "rag": "/rag/ask",
     }
