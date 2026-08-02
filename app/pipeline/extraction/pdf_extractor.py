@@ -26,7 +26,7 @@ class PDFExtractor(BaseExtractor):
                 pages = [page.get_text() for page in document]
                 return ExtractionResult(
                     text="\n".join(pages),
-                    page_count=document.page_count,
+                    total_pages=document.page_count,
                     metadata=document.metadata,
                 )
         except fitz.FileDataError as exc:

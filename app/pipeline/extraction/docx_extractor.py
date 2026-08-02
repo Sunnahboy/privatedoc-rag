@@ -22,7 +22,7 @@ class DOCXExtractor(BaseExtractor):
 
         return ExtractionResult(
             text="\n".join(paragraphs),
-            page_count=1,
+            total_pages=1,
             metadata={"paragraphs": len(paragraphs)},
         )
 

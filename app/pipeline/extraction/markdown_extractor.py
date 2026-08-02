@@ -16,7 +16,7 @@ class MarkdownExtractor(BaseExtractor):
 
         return ExtractionResult(
             text=text,
-            page_count=1,
+            total_pages=1,
             metadata={},
         )
 
