@@ -14,7 +14,6 @@ class FixedChunker(BaseChunker):
 
         if self.chunk_size <= 0:
             raise ValueError("chunk size must be greater than zero")
-        self.chunk_size = chunk_size
 
         if self.overlap < 0:
             raise ValueError("Overlap cannot be negative")
@@ -35,8 +34,8 @@ class FixedChunker(BaseChunker):
             chunks.append(
                 Chunk(
                     chunk_id=str(uuid.uuid4()),
-                    document_id=cleaning_result.metadata["document_id"],  # placeholder for now
-                    chunk_index= index,  # current loop index
+                    document_id="",# Assigned later by IngestionPipeline
+                    chunk_index=index,  # current loop index
                     text=text[start:end],
                     start_char=start,
                     end_char=end,
