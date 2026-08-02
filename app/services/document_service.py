@@ -170,7 +170,7 @@ async def _process_document(
     try:
         result = await pipeline.ingest(
             document_id=document.id,
-            file_path=str(saved_path),
+            file_path=saved_path,
         )
         document.status = "indexed"
         document.total_chunks = result.total_chunks

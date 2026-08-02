@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from .models import IngestionResult
 
@@ -8,5 +9,5 @@ class BaseIngestionPipeline(ABC):
     async def ingest(
         self,
         document_id: str,
-        files_path: str,
+        file_path: Path,
     ) -> IngestionResult: ...
