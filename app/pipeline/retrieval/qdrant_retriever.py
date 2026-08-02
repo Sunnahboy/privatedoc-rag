@@ -2,7 +2,7 @@ from typing import Self
 
 from app.config import settings
 from app.pipeline.embeddings.base import BaseEmbedder
-from app.pipeline.embeddings.ollama_emdedder import OllamaEmbedder
+from backend.app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
