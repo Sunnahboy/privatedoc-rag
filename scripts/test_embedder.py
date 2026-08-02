@@ -5,7 +5,7 @@ import time
 import uuid
 
 from app.pipeline.chunking.models import Chunk
-from app.pipeline.embeddings.ollama_emdedder import OllamaEmbedder
+from backend.app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
 
 
 def generate_random_text(min_words=50, max_words=150):
