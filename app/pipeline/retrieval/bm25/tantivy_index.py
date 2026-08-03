@@ -4,6 +4,7 @@ from app.config import settings
 from tantivy import Index, SchemaBuilder
 
 from .base import BaseSparseIndex
+from app.pipeline.chunking.models import Chunk
 
 
 class TantivyIndex(BaseSparseIndex):
@@ -31,7 +32,21 @@ class TantivyIndex(BaseSparseIndex):
         else:
             self.index = Index(self.schema, path=self.index_path)
 
-    async def add_documents(self, chunks): ...
+    async def add_documents(self, chunks)->None:
+        for chunk in chunks:
+            self.writer.add_document(
+                self.schema.parse_document(
+                    {
+                    "document_id": chunk.document_id,
+                    "chunk_id": chunk.chunk_id,
+                    "chunk_index": chunk.chunk_index,
+                    "text": chunk.text,
+
+                    }
+                )
+            )
+        self.writer.commit()
+        self.searcher = self.index.searcher()
 
     async def search(
         self,
