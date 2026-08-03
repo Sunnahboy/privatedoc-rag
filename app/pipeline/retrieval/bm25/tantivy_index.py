@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.config import settings
-from app.pipeline.chunking.fixed_chunker import Chunk
+from app.pipeline.chunking.models import Chunk
 from app.pipeline.retrieval.models import RetrievedChunk
 from tantivy import Document, Index, SchemaBuilder
 
@@ -55,6 +55,7 @@ class TantivyIndex(BaseSparseIndex):
             )
             self.writer.add_document(doc)
         self.writer.commit()
+        self.index.reload()
         self.searcher = self.index.searcher()
 
     async def search(
@@ -89,7 +90,8 @@ class TantivyIndex(BaseSparseIndex):
     async def delete_document(
         self,
         document_id: str,
-    ): ...
+    ):
+        raise NotImplementedError
 
     async def close(self):
         self.writer = None
