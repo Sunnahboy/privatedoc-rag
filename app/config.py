@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     qdrant_batch_size: int = 64
     retrieval_score_threshold: float = 0.5
     generation_timeout: int = 60
+    hybrid_candidate_multiplier: int = 2
 
     top_k_search: int = 5
     rag_chunk_size: int = 500
