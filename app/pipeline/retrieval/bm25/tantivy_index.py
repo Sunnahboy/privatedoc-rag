@@ -90,8 +90,14 @@ class TantivyIndex(BaseSparseIndex):
     async def delete_document(
         self,
         document_id: str,
-    ):
-        raise NotImplementedError
+    ) -> None:
+        self.writer.delete_documents(
+            "document_id",
+            document_id,
+        )
+        self.writer.commit()
+        self.index.reload()
+        self.searcher = self.index.searcher()
 
     async def close(self):
         self.writer = None
