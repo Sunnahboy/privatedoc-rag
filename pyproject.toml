@@ -19,5 +19,6 @@ dependencies = [
     "python-pptx>=1.0.2",
     "qdrant-client>=1.18.0",
     "sqlalchemy>=2.0.51",
+    "tantivy>=0.26.0",
     "uvicorn[standard]>=0.49.0",
 ]

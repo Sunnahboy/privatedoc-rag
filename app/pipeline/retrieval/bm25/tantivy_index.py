@@ -1,10 +1,11 @@
 from pathlib import Path
 
 from app.config import settings
-from tantivy import Index, SchemaBuilder
+from app.pipeline.chunking.fixed_chunker import Chunk
+from app.pipeline.retrieval.models import RetrievedChunk
+from tantivy import Document, Index, SchemaBuilder
 
 from .base import BaseSparseIndex
-from app.pipeline.chunking.models import Chunk
 
 
 class TantivyIndex(BaseSparseIndex):
@@ -28,23 +29,31 @@ class TantivyIndex(BaseSparseIndex):
         self.index_path.mkdir(parents=True, exist_ok=True)
 
         if self.index_path.exists() and any(self.index_path.iterdir()):
-            self.index = Index.open(self.index_path)
+            self.index = Index.open(str(self.index_path))
         else:
-            self.index = Index(self.schema, path=self.index_path)
-
-    async def add_documents(self, chunks)->None:
-        for chunk in chunks:
-            self.writer.add_document(
-                self.schema.parse_document(
-                    {
-                    "document_id": chunk.document_id,
-                    "chunk_id": chunk.chunk_id,
-                    "chunk_index": chunk.chunk_index,
-                    "text": chunk.text,
-
-                    }
-                )
+            self.index = Index(
+                self.schema,
+                path=str(self.index_path),
             )
+        self.writer = self.index.writer()
+        self.searcher = self.index.searcher()
+
+    async def add_documents(
+        self,
+        chunks: list[Chunk],
+    ) -> None:
+        """converts  domain model (Chunk) into Tantivy documents.
+        - writes them to the index,
+        - After commit(), the documents become searchable,
+        - A new Searcher  queries  latest index."""
+        for chunk in chunks:
+            doc = Document(
+                document_id=chunk.document_id,
+                chunk_id=chunk.chunk_id,
+                chunk_index=chunk.chunk_index,
+                text=chunk.text,
+            )
+            self.writer.add_document(doc)
         self.writer.commit()
         self.searcher = self.index.searcher()
 
@@ -52,7 +61,30 @@ class TantivyIndex(BaseSparseIndex):
         self,
         query: str,
         top_k: int,
-    ): ...
+    ) -> list[RetrievedChunk]:
+        if self.searcher is None:
+            self.searcher = self.index.searcher()
+        query_parser = self.index.parse_query(
+            query,
+            ["text"],
+        )
+        hits = self.searcher.search(
+            query_parser,
+            limit=top_k,
+        )
+        results: list[RetrievedChunk] = []
+        for score, doc_address in hits.hits:
+            doc = self.searcher.doc(doc_address)
+            results.append(
+                RetrievedChunk(
+                    chunk_id=doc["chunk_id"][0],
+                    document_id=doc["document_id"][0],
+                    chunk_index=doc["chunk_index"][0],
+                    text=doc["text"][0],
+                    score=score,
+                )
+            )
+        return results
 
     async def delete_document(
         self,
@@ -60,4 +92,6 @@ class TantivyIndex(BaseSparseIndex):
     ): ...
 
     async def close(self):
-        pass
+        self.writer = None
+        self.searcher = None
+        self.index = None
