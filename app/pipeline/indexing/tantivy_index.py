@@ -3,9 +3,10 @@ from pathlib import Path
 from app.config import settings
 from app.pipeline.chunking.models import Chunk
 from app.pipeline.retrieval.models import RetrievedChunk
+from app.utils.logging_utils import logging
 from tantivy import Document, Index, SchemaBuilder
 
-from .base import BaseSparseIndex
+from .interface import BaseSparseIndex
 
 
 class TantivyIndex(BaseSparseIndex):
@@ -65,10 +66,12 @@ class TantivyIndex(BaseSparseIndex):
     ) -> list[RetrievedChunk]:
         if self.searcher is None:
             self.searcher = self.index.searcher()
-        query_parser = self.index.parse_query(
+        query_parser, errors = self.index.parse_query_lenient(
             query,
             ["text"],
         )
+        if errors:
+            logging.debug("Tantivy query parser recovered from: %s", errors)
         hits = self.searcher.search(
             query_parser,
             limit=top_k,

@@ -2,7 +2,7 @@ from typing import Self
 
 from app.config import settings
 
-from .bm25.tantivy_index import TantivyIndex
+from ..indexing.tantivy_index import TantivyIndex
 from .exceptions import RetrievalError
 from .interface import BaseRetriever
 from .models import RetrievalResult
