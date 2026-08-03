@@ -45,13 +45,20 @@ class HybridRetriever(BaseRetriever):
     ) -> RetrievalResult:
         if not query or not query.strip():
             raise RetrievalError("Query cannot be empty")
-        limit = top_k or settings.top_k_search
+        if top_k is None:
+            limit = settings.top_k_search
+        else:
+            limit = top_k
+
+        if limit <= 0:
+            raise RetrievalError("top_k must be greater than zero")
+
         if limit <= 0:
             raise RetrievalError("top_k must be greater than zero")
         # Retrieve more candidates so RRF has a richer set to merge.
         candidate_limit = limit * settings.hybrid_candidate_multiplier
 
-        dense_result, self.sparse_result = await asyncio.gather(
+        dense_result, sparse_result = await asyncio.gather(
             self.dense.retrieve(
                 query=query,
                 top_k=candidate_limit,
@@ -66,7 +73,7 @@ class HybridRetriever(BaseRetriever):
         # Execute reciprocal rank fusion over the enriched candidate sets
         fused_chunks = self.fusion.fuse(
             dense_result.chunks,
-            self.sparse_result.chunks,
+            sparse_result.chunks,
         )
 
         return RetrievalResult(
