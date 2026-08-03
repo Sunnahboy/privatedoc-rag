@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     top_k_search: int = 5
     rag_chunk_size: int = 500
     rag_chunk_overlap: int = 100
+    tantivy_index_path: str = "./data/tantivy"
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
