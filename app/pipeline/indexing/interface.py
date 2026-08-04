@@ -1,16 +1,15 @@
 from abc import ABC, abstractmethod
 
-from app.pipeline.embeddings.models import EmbeddingResult
 from app.pipeline.retrieval.models import RetrievedChunk
 
-from .models import IndexingResult
+from .models import IndexingRequest, IndexingResult
 
 
 class BaseIndexer(ABC):
     @abstractmethod
     async def index(
         self,
-        embeddings: list[EmbeddingResult],
+        request: IndexingRequest,
     ) -> IndexingResult:
         """ "
         Index embeddings into the vector database.

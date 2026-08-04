@@ -1,6 +1,7 @@
 import httpx
 from app.config import settings
 from app.pipeline.retrieval.models import RetrievedChunk
+from app.utils.profiler import record_ollama_metrics
 
 from .exceptions import GenerationError
 from .interface import BaseGenerator
@@ -105,9 +106,11 @@ class OllamaGenerator(BaseGenerator):
                 f"{self.base_url}/api/generate",
                 json=payload,
             )
-
             response.raise_for_status()
             data = response.json()
+
+            record_ollama_metrics(data)
+
         except httpx.HTTPStatusError as exc:
             raise GenerationError(exc.response.json()["error"]) from exc
 

@@ -2,7 +2,7 @@ import asyncio
 import uuid
 
 from app.pipeline.chunking.models import Chunk
-from app.pipeline.indexing.tantivy_index import TantivyIndex
+from app.pipeline.indexing.tantivy_indexer import TantivyIndex
 
 
 async def main():

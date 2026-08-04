@@ -8,7 +8,7 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from .exceptions import CollectionError, UpsertError
 from .interface import BaseIndexer
-from .models import IndexingResult
+from .models import IndexingRequest, IndexingResult
 
 
 class QdrantIndexer(BaseIndexer):
@@ -101,8 +101,10 @@ class QdrantIndexer(BaseIndexer):
 
     async def index(
         self,
-        embeddings: list[EmbeddingResult],
+        request: IndexingRequest,
     ) -> IndexingResult:
+        embeddings = request.embeddings
+
         if not embeddings:
             return IndexingResult(
                 indexed_count=0,

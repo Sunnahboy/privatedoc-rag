@@ -9,7 +9,7 @@ from tantivy import Document, Index, SchemaBuilder
 from .interface import BaseSparseIndex
 
 
-class TantivyIndex(BaseSparseIndex):
+class TantivyIndexer(BaseSparseIndex):
     def __init__(
         self,
         index_path: str | None = None,

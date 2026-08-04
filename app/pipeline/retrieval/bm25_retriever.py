@@ -2,7 +2,7 @@ from typing import Self
 
 from app.config import settings
 
-from ..indexing.tantivy_index import TantivyIndex
+from ..indexing.tantivy_indexer import TantivyIndexer
 from .exceptions import RetrievalError
 from .interface import BaseRetriever
 from .models import RetrievalResult
@@ -11,9 +11,9 @@ from .models import RetrievalResult
 class BM25Retriever(BaseRetriever):
     def __init__(
         self,
-        index: TantivyIndex | None = None,
+        index: TantivyIndexer | None = None,
     ):
-        self.index = index or TantivyIndex()
+        self.index = index or TantivyIndexer()
 
     async def __aenter__(self) -> Self:
         return self
