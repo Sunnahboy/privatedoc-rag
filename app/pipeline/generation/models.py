@@ -9,3 +9,4 @@ class GenerateResult:
     citations: list[RetrievedChunk]
     prompt_tokens: int
     completion_tokens: int
+    prompt_chars: int

@@ -15,3 +15,6 @@ class RetrievalResult:
     chunks: list[RetrievedChunk]
     found: bool
     message: str | None = None
+    dense_hits: int = 0
+    sparse_hits: int = 0
+    fused_hits: int = 0

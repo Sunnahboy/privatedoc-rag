@@ -45,7 +45,12 @@ class RAGPipeline(BaseRAGPipeline):
         timings = get_timings()
         log_rag_profile(
             timings=timings,
+            dense_hits=retrieved.dense_hits,
+            sparse_hits=retrieved.sparse_hits,
+            fused_hits=retrieved.fused_hits,
             context_chunks=len(retrieved.chunks),
+            context_chars=sum(len(chunk.text) for chunk in retrieved.chunks),
+            prompt_chars=result.prompt_chars,
         )
 
         return result
