@@ -1,9 +1,12 @@
 import re
 from pathlib import Path
+
 from fastapi import HTTPException, status
+
 from app.config import settings
 
-def sanitize_filename(filename:str)->str:
+
+def sanitize_filename(filename: str) -> str:
     """
     Convert an uploaded filename into a safer filename.
     Why:
@@ -14,19 +17,20 @@ def sanitize_filename(filename:str)->str:
     "../../my report!!.pdf" -> "my_report.pdf"
     """
 
-    name  = Path(filename).name #remove any path parts
-    name  = name.replace(" ","_")
-    #remove any char that are not letters , numbers , dots etc
-    name  = re.sub(r"[^A-Za-z0-9._-]","", name)
+    name = Path(filename).name  # remove any path parts
+    name = name.replace(" ", "_")
+    # remove any char that are not letters , numbers , dots etc
+    name = re.sub(r"[^A-Za-z0-9._-]", "", name)
 
-    #avoid empty filename after cleaning
-    if not name: 
+    # avoid empty filename after cleaning
+    if not name:
         raise HTTPException(
-            status_code = status.HTTP_400_BAD_REQUEST, 
-            detail="Invalid filename")
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filename"
+        )
     return name
 
-def get_file_extension(filename:str):
+
+def get_file_extension(filename: str):
     """
     Return the lowercase file extension.
     why:
@@ -35,7 +39,8 @@ def get_file_extension(filename:str):
     """
     return Path(filename).suffix.lower()
 
-def validate_file_extension(filename:str)->None:
+
+def validate_file_extension(filename: str) -> None:
     """
     Validate that the uploaded file type is allowed.
 
@@ -45,32 +50,34 @@ def validate_file_extension(filename:str)->None:
       - Markdown
       - PPT
     """
-    extension  = get_file_extension(filename)
+    extension = get_file_extension(filename)
     if extension not in settings.allowed_extensions_set:
         raise HTTPException(
-            status_code = status.HTTP_400_BAD_REQUEST, 
-            detail = f"Unsupported file type '{extension}'. Allowed types: {sorted(settings.allowed_extensions_set)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type '{extension}'. Allowed types: {sorted(settings.allowed_extensions_set)}",
         )
 
-def validate_file_size(file_size:int)->None:
+
+def validate_file_size(file_size: int) -> None:
     """
     Validate uploaded file size.
     Why:
     - Large files can consume memory and disk.
     - Upload limits protect the backend from abuse or accidents.
     """
-    if  file_size <= 0:
+    if file_size <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail= "File is Empty",
+            detail="File is Empty",
         )
     if file_size > settings.max_upload_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"File too large. Maximum allowed size is {settings.max_upload_mb} MB.",
         )
-    
-def ensure_upload_dir()->Path:
+
+
+def ensure_upload_dir() -> Path:
     """
     Create upload directory if it does not exit
     why:
@@ -78,6 +85,5 @@ def ensure_upload_dir()->Path:
      -keeps the storage stepup predictable
     """
     upload_path = Path(settings.upload_dir)
-    upload_path.mkdir(parents=True,exist_ok=True)
+    upload_path.mkdir(parents=True, exist_ok=True)
     return upload_path
-

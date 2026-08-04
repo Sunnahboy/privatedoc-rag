@@ -3,6 +3,7 @@ from typing import Self
 from app.config import settings
 from app.pipeline.embeddings.base import BaseEmbedder
 from app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
+from app.utils.profiler import profile
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
@@ -59,7 +60,8 @@ class QdrantRetriever(BaseRetriever):
             raise RetrievalError("top_k must be greater than zero")
         if not query.strip():
             raise RetrievalError("Query cannot be empty")
-        query_vector = await self._embed_query(query)
+        with profile("Query Embedding"):
+            query_vector = await self._embed_query(query)
 
         try:
             query_filter = None
@@ -73,13 +75,14 @@ class QdrantRetriever(BaseRetriever):
                         )
                     ]
                 )
-            response = await self.client.query_points(
-                collection_name=self.collection_name,
-                query=query_vector,
-                query_filter=query_filter,
-                limit=limit,
-                with_payload=True,
-            )
+            with profile("Qdrant Search"):
+                response = await self.client.query_points(
+                    collection_name=self.collection_name,
+                    query=query_vector,
+                    query_filter=query_filter,
+                    limit=limit,
+                    with_payload=True,
+                )
 
             chunks = []
 

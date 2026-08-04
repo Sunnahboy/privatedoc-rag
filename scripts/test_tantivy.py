@@ -2,11 +2,11 @@ import asyncio
 import uuid
 
 from app.pipeline.chunking.models import Chunk
-from app.pipeline.retrieval.bm25.tantivy_index import TantivyIndex
+from app.pipeline.indexing.tantivy_indexer import TantivyIndexer
 
 
 async def main():
-    index = TantivyIndex()
+    index = TantivyIndexer()
 
     chunks = [
         Chunk(

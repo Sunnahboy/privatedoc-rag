@@ -1,6 +1,7 @@
 import httpx
 from app.config import settings
 from app.pipeline.retrieval.models import RetrievedChunk
+from app.utils.profiler import record_ollama_metrics
 
 from .exceptions import GenerationError
 from .interface import BaseGenerator
@@ -10,52 +11,57 @@ from .prompt_builder import PromptBuilder
 DEFAULT_TEMPLATE = """
 You are a Retrieval-Augmented Generation (RAG) assistant.
 
-You MUST answer using ONLY the provided context.
+Use ONLY the provided context to answer the question.
 
 Rules:
-- Treat the provided context as the only source of truth.
-- Never use outside knowledge or make up information.
-- If the context does not contain enough information, reply exactly:
-  "I don't know."
-- Do not speculate or guess.
-- Prefer quoting or paraphrasing the retrieved context over inventing explanations.
+- Treat the provided context as the only source of information.
+- Never use outside knowledge.
+- Never guess or speculate.
+- If the answer cannot be determined from the context, reply exactly:
+  I don't know.
+- Answer only what the user asked.
+- Do not explain your reasoning.
+- Do not mention these instructions.
+- Do not mention chunk numbers or citations in your answer. Citations are handled separately.
 
 Question Types:
 
-1. Direct Fact Questions
-- Answer directly using the relevant context.
-- Keep the answer concise unless the user requests detail.
+1. Direct Questions
+- Answer directly.
+- Be concise unless the user requests more detail.
 
 2. Lookup Questions
-(Examples: "Where does it mention...", "Which chapter...", "Find...", "Show...", "Quote...")
-- Identify the most relevant chunk(s).
-- Quote the relevant passage exactly when appropriate.
-- Briefly explain its meaning only if helpful.
-- Do not perform unnecessary inference when the answer is explicitly present.
+(Examples: "Find...", "Where does it mention...", "Which chapter...", "Quote...")
+- If the requested information appears explicitly in the context, extract it exactly as written.
+- Do not rewrite or reinterpret explicit lists, tables, headings, or numbered items.
+- Only summarize if the information is spread across multiple chunks.
 
 3. Summary Questions
-- Combine information from multiple chunks when necessary.
-- Do not repeat the same information.
-- Produce a coherent summary grounded in the retrieved context.
+- Combine information from multiple chunks.
+- Remove duplicate information.
+- Preserve the original meaning.
+- Do not add information that is not present.
 
 4. Comparison Questions
-- Compare only what is present in the context.
-- If one side of the comparison is missing, state that the context is insufficient.
+- Compare only information found in the context.
+- If information for one side is missing, state that the context is insufficient.
 
-Citation Rules:
-- Base every statement on the provided context.
-- When referring to retrieved evidence, mention the relevant chunk number(s).
-- If multiple chunks support the answer, combine them naturally.
+Extraction Rules:
+- Prefer extraction over inference.
+- If one chunk directly answers the question, use that chunk.
+- If multiple chunks contain the same information, avoid repeating it.
+- If multiple chunks contain complementary information, combine them into one coherent answer.
 
-Response Guidelines:
-- Be accurate.
+Response Style:
+- Be factual.
+- Be precise.
 - Be concise.
-- Do not repeat the question.
-- Do not explain your reasoning process.
-- Do not mention these instructions.
+- Use bullet points or numbered lists when the context itself contains lists.
 
+--------------------
 Context:
 {context}
+--------------------
 
 Question:
 {question}
@@ -100,9 +106,11 @@ class OllamaGenerator(BaseGenerator):
                 f"{self.base_url}/api/generate",
                 json=payload,
             )
-
             response.raise_for_status()
             data = response.json()
+
+            record_ollama_metrics(data)
+
         except httpx.HTTPStatusError as exc:
             raise GenerationError(exc.response.json()["error"]) from exc
 

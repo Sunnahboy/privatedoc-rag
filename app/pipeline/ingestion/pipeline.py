@@ -10,8 +10,9 @@ from app.pipeline.cleaning.text_cleaner import TextCleaner
 from app.pipeline.embeddings.base import BaseEmbedder
 from app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
 from app.pipeline.extraction.factory import ExtractorFactory
+from app.pipeline.indexing.composite_indexer import CompositeIndexer
 from app.pipeline.indexing.interface import BaseIndexer
-from app.pipeline.indexing.qdrant_indexer import QdrantIndexer
+from app.pipeline.indexing.models import IndexingRequest
 
 from .base import BaseIngestionPipeline
 from .exceptions import (
@@ -46,7 +47,7 @@ class IngestionPipeline(BaseIngestionPipeline):
         self.cleaner = cleaner or TextCleaner()
         self.chunker = chunker or FixedChunker()
         self.embedder = embedder or OllamaEmbedder()
-        self.indexer = indexer or QdrantIndexer()
+        self.indexer = indexer or CompositeIndexer()
 
     async def ingest(
         self,
@@ -108,7 +109,12 @@ class IngestionPipeline(BaseIngestionPipeline):
             # 5. Indexing
             indexing_result = await self._run_stage(
                 stage_name="indexing",
-                action=lambda: self.indexer.index(embeddings),
+                action=lambda: self.indexer.index(
+                    IndexingRequest(
+                        chunks=chunks,
+                        embeddings=embeddings,
+                    )
+                ),
                 error_cls=IndexingError,
                 error_msg="Failed indexing embeddings.",
                 benchmark=benchmark,

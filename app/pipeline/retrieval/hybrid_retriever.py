@@ -2,6 +2,7 @@ import asyncio
 from typing import Self
 
 from app.config import settings
+from app.utils.profiler import profile
 
 from .bm25_retriever import BM25Retriever
 from .exceptions import RetrievalError
@@ -58,23 +59,36 @@ class HybridRetriever(BaseRetriever):
         # Retrieve more candidates so RRF has a richer set to merge.
         candidate_limit = limit * settings.hybrid_candidate_multiplier
 
-        dense_result, sparse_result = await asyncio.gather(
-            self.dense.retrieve(
+        async def _dense_search():
+            return await self.dense.retrieve(
                 query=query,
                 top_k=candidate_limit,
                 document_id=document_id,
-            ),
-            self.sparse.retrieve(
-                query=query,
-                top_k=candidate_limit,
-                document_id=document_id,
-            ),
-        )
-        # Execute reciprocal rank fusion over the enriched candidate sets
-        fused_chunks = self.fusion.fuse(
-            dense_result.chunks,
-            sparse_result.chunks,
-        )
+            )
+
+        async def _sparse_search():
+            with profile("Sparse Search"):
+                return await self.sparse.retrieve(
+                    query=query,
+                    top_k=candidate_limit,
+                    document_id=document_id,
+                )
+
+        with profile("Hybrid Retrieval"):
+            dense_result, sparse_result = await asyncio.gather(
+                _dense_search(),
+                _sparse_search(),
+            )
+
+            with profile("RRF Fusion"):
+                fused_chunks = self.fusion.fuse(
+                    dense_result.chunks,
+                    sparse_result.chunks,
+                )
+
+        print(f"Dense: {len(dense_result.chunks)}")
+        print(f"Sparse: {len(sparse_result.chunks)}")
+        print(f"Fused: {len(fused_chunks)}")
 
         return RetrievalResult(
             chunks=fused_chunks[:limit],
