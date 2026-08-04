@@ -86,12 +86,13 @@ class HybridRetriever(BaseRetriever):
                     sparse_result.chunks,
                 )
 
-        print(f"Dense: {len(dense_result.chunks)}")
-        print(f"Sparse: {len(sparse_result.chunks)}")
-        print(f"Fused: {len(fused_chunks)}")
+        
 
         return RetrievalResult(
             chunks=fused_chunks[:limit],
             found=bool(fused_chunks),
             message=None if fused_chunks else "No matching chunks found.",
+            dense_hits=len(dense_result.chunks),
+            sparse_hits=len(sparse_result.chunks),
+            fused_hits=len(fused_chunks),
         )
