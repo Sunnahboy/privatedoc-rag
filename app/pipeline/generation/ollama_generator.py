@@ -100,6 +100,10 @@ class OllamaGenerator(BaseGenerator):
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "keep_alive": "30m",
+            "options": {
+            "num_predict": 128,
+        },
         }
         try:
             response = await self.client.post(
@@ -122,4 +126,5 @@ class OllamaGenerator(BaseGenerator):
             citations=context,
             prompt_tokens=data["prompt_eval_count"],
             completion_tokens=data["eval_count"],
+            prompt_chars=len(prompt),
         )
