@@ -4,7 +4,14 @@ from typing import Self
 from app.config import settings
 from app.pipeline.embeddings.models import EmbeddingResult
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 
 from .exceptions import CollectionError, UpsertError
 from .interface import BaseIndexer
@@ -126,4 +133,22 @@ class QdrantIndexer(BaseIndexer):
         return IndexingResult(
             indexed_count=len(points),
             collection_name=self.collection_name,
+        )
+
+    async def delete_document(
+        self,
+        document_id: str,
+    ) -> None:
+        """Delete all vectors belonging to a document."""
+        await self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="document_id",
+                        match=MatchValue(value=document_id),
+                    )
+                ]
+            ),
+            wait=True,
         )

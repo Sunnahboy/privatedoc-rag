@@ -20,8 +20,16 @@ class TantivyIndexer(BaseSparseIndex):
         self.writer = None
         builder = SchemaBuilder()
 
-        self.document_id = builder.add_text_field("document_id", stored=True)
-        self.chunk_id = builder.add_text_field("chunk_id", stored=True)
+        self.document_id = builder.add_text_field(
+            "document_id",
+            stored=True,
+            tokenizer_name="raw",
+        )
+        self.chunk_id = builder.add_text_field(
+            "chunk_id",
+            stored=True,
+            tokenizer_name="raw",
+        )
         self.chunk_index = builder.add_integer_field("chunk_index", stored=True)
         self.text = builder.add_text_field("text", stored=True)
 
@@ -29,7 +37,9 @@ class TantivyIndexer(BaseSparseIndex):
 
         self.index_path.mkdir(parents=True, exist_ok=True)
 
-        if self.index_path.exists() and any(self.index_path.iterdir()):
+        meta_file = self.index_path / "meta.json"
+
+        if meta_file.exists():
             self.index = Index.open(str(self.index_path))
         else:
             self.index = Index(

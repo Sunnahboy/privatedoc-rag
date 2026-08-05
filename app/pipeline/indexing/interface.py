@@ -15,6 +15,13 @@ class BaseIndexer(ABC):
         Index embeddings into the vector database.
         """
         ...
+    @abstractmethod
+    async def delete_document(
+        self,
+        document_id: str,
+    ) -> None:
+        """Delete all vectors belonging to a document."""
+        ...
 
 
 class BaseSparseIndex(ABC):

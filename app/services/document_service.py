@@ -3,6 +3,7 @@ from pathlib import Path
 import aiofiles
 from app.config import settings
 from app.models.document import Document
+from app.pipeline.indexing.composite_indexer import CompositeIndexer
 from app.pipeline.ingestion.pipeline import IngestionPipeline
 from app.schemas.document_schema import (
     DocumentDeleteResponse,
@@ -208,9 +209,13 @@ async def delete_document_by_id(
     Delete one document.
 
     Current deletion behavior:
-     - Delete Qdrant vectors.
-     - Delete chunk rows.
-     - Delete cache entries
+     - Delete vectors from Qdrant.
+     - Delete BM25 entries from Tantivy.
+     - Delete local file.
+     - Delete metadata row.
+
+    Future deletion behavior:
+     - Delete cached answers.
      - Delete graph entities and relationships.
     """
 
@@ -221,12 +226,17 @@ async def delete_document_by_id(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Document {document_id} not found",
         )
-    upload_dir = ensure_upload_dir()
-    saved_path = upload_dir / document.storage_key
-    saved_path.unlink(missing_ok=True)
+    indexer = CompositeIndexer()
+    try:
+        await indexer.delete_document(document_id)
+        upload_dir = ensure_upload_dir()
+        saved_path = upload_dir / document.storage_key
+        saved_path.unlink(missing_ok=True)
 
-    await db.delete(document)
-    await db.commit()
+        await db.delete(document)
+        await db.commit()
+    finally:
+        await indexer.close()
 
     return DocumentDeleteResponse(
         document_id=document_id,
