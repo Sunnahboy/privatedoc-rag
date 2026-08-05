@@ -32,7 +32,7 @@ class Document(Base):
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     stored_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_extension: Mapped[str] = mapped_column(String(20), nullable=False)
-    file_size_bytes: Mapped[str] = mapped_column(BigInteger, nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     storage_provider: Mapped[str] = mapped_column(
         String(50), default="local", nullable=False
