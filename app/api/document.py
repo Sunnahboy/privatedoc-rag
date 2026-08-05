@@ -71,7 +71,9 @@ async def upload_document(
     except HTTPException:
         raise  # silently swallow the error
     except Exception as exc:
-        logger.exception("unexpected document upload failure %s",)
+        logger.exception(
+            "unexpected document upload failure for filename: %s",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unexpected error while uploading document.",
@@ -109,16 +111,15 @@ async def delete_document(
     """
     Delete an uploaded document.
 
-    current behavior.
-     -Delete local file.
-     -Delete metadata row.
+    Current behavior:
+     - Delete vectors from Qdrant.
+     - Delete BM25 entries from Tantivy.
+     - Delete local file.
+     - Delete metadata row.
 
-    Later behavior:
-     -Delete chunks
-     -Delete vectors from Qdrant.
-     -Delete cached answers.
-     -Delete graph records.
-
+    Future behavior:
+     - Delete cached answers.
+     - Delete graph records.
     """
 
     try:
@@ -128,7 +129,7 @@ async def delete_document(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("Unexpected document delete failure: %s")
+        logger.exception("Unexpected document delete failure for document_id: %s")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unexpected error while deleting document.",
