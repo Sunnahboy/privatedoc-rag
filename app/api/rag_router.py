@@ -1,7 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
+from app.models.document import Document
 from app.orchestration.rag_pipeline import RAGPipeline
 from app.schemas.rag_schema import AskRequest, AskResponse, CitationResponse
 
@@ -19,8 +22,21 @@ async def get_pipeline() -> RAGPipeline:
 async def ask(
     request: AskRequest,
     pipeline: Annotated[get_pipeline, Depends(get_pipeline)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    result = await pipeline.ask(request.question)
+
+    if request.document_id:
+        document = await db.get(Document, request.document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{request.document_id}' not found.",
+        )
+    result = await pipeline.ask(
+        question=request.question,
+        document_id=request.document_id,
+    )
 
     return AskResponse(
         answer=result.answer,
