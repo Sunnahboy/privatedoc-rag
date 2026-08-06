@@ -73,13 +73,17 @@ class TantivyIndexer(BaseSparseIndex):
         self,
         query: str,
         top_k: int,
+        document_id: str | None = None,
     ) -> list[RetrievedChunk]:
+        if document_id:
+            query = f"document_id:{document_id} AND ({query})"
         if self.searcher is None:
             self.searcher = self.index.searcher()
         query_parser, errors = self.index.parse_query_lenient(
             query,
-            ["text"],
+            ["document_id", "text"],
         )
+
         if errors:
             logging.debug("Tantivy query parser recovered from: %s", errors)
         hits = self.searcher.search(

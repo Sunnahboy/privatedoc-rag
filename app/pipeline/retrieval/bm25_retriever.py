@@ -35,10 +35,10 @@ class BM25Retriever(BaseRetriever):
         chunks = await self.index.search(
             query=query,
             top_k=limit,
+            document_id=document_id,
         )
 
-        if document_id:
-            chunks = [chunk for chunk in chunks if chunk.document_id == document_id]
+        
 
         return RetrievalResult(
             chunks=chunks,

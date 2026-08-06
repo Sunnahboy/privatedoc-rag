@@ -8,4 +8,5 @@ class BaseRAGPipeline(ABC):
     async def ask(
         self,
         question: str,
+        document_id:str | None = None,
     ) -> GenerateResult: ...

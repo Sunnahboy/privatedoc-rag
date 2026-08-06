@@ -15,6 +15,7 @@ class BaseIndexer(ABC):
         Index embeddings into the vector database.
         """
         ...
+
     @abstractmethod
     async def delete_document(
         self,
@@ -36,6 +37,7 @@ class BaseSparseIndex(ABC):
         self,
         query: str,
         top_k: int,
+        document_id: str | None = None,
     ) -> list[RetrievedChunk]:
         """Search indexed documents."""
 

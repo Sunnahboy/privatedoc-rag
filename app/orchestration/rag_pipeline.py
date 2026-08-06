@@ -31,11 +31,21 @@ class RAGPipeline(BaseRAGPipeline):
     async def ask(
         self,
         question: str,
+        document_id: str | None = None,
     ) -> GenerateResult:
         reset_profiler()
         with profile("Retrieval"):
             retrieved = await self.retriever.retrieve(
                 query=question,
+                document_id=document_id,
+            )
+        if not retrieved.found:
+            return GenerateResult(
+                answer="I couldn't find any relevant information in the selected document.",
+                citations=[],
+                prompt_tokens=0,
+                completion_tokens=0,
+                prompt_chars=0,
             )
         with profile("Generation"):
             result = await self.generator.generate(
