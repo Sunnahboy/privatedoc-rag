@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -20,7 +22,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 20
     allowed_file_extensions: str = ".pdf,.txt,.md,.ppt,.docx"
     file_stream_chunk_size_bytes: int = 1024 * 1024  # 1MB
-
+    chunking_strategy: Literal["fixed", "recursive"] = "recursive"
     # Metadata database
     # Development: SQLite
     # Production later: PostgreSQL, for example:

@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.document import Document
 from app.orchestration.rag_pipeline import RAGPipeline
 from app.schemas.rag_schema import AskRequest, AskResponse, CitationResponse
+from app.services import document_service
 
 router = APIRouter(
     prefix="/rag",
@@ -26,13 +26,16 @@ async def ask(
 ):
 
     if request.document_id:
-        document = await db.get(Document, request.document_id)
-
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document '{request.document_id}' not found.",
+        document = await document_service.get_document_by_id(
+            request.document_id,
+            db,
         )
+
+        if document is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document '{request.document_id}' not found.",
+            )
     result = await pipeline.ask(
         question=request.question,
         document_id=request.document_id,

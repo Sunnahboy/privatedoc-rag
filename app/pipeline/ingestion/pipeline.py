@@ -3,8 +3,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.config import settings
 from app.pipeline.chunking.base import BaseChunker
 from app.pipeline.chunking.fixed_chunker import FixedChunker
+from app.pipeline.chunking.recursive_chunker import RecursiveChunker
 from app.pipeline.cleaning.base import BaseCleaner
 from app.pipeline.cleaning.text_cleaner import TextCleaner
 from app.pipeline.embeddings.base import BaseEmbedder
@@ -45,7 +47,12 @@ class IngestionPipeline(BaseIngestionPipeline):
         indexer: BaseIndexer | None = None,
     ):
         self.cleaner = cleaner or TextCleaner()
-        self.chunker = chunker or FixedChunker()
+        if chunker is not None:
+            self.chunker = chunker
+        elif settings.chunking_strategy == "recursive":
+            self.chunker = RecursiveChunker()
+        else:
+            self.chunker = FixedChunker()
         self.embedder = embedder or OllamaEmbedder()
         self.indexer = indexer or CompositeIndexer()
 
