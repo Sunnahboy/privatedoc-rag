@@ -1,3 +1,4 @@
+import onnxruntime as ort
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,39 +18,48 @@ class Settings(BaseSettings):
 
     # Upload settings
     upload_dir: str = "../data/uploads"
-    max_upload_mb: int = 20
+    max_upload_mb: int = 300
     allowed_file_extensions: str = ".pdf,.txt,.md,.ppt,.docx"
     file_stream_chunk_size_bytes: int = 1024 * 1024  # 1MB
 
     # Metadata database
-    # Development: SQLite
-    # Production later: PostgreSQL, for example:
-    # postgresql+asyncpg://user:password@postgres:5432/privatedoc
     database_url: str = "sqlite+aiosqlite:///./privatedoc.db"
     database_echo: bool = False
 
-    # future RAG services
+    # Extraction & OCR settings
+    pdf_ocr_dpi: int = 72
+    min_digital_text_words: int = 15
+    pdf_ocr_max_concurrent: int = (
+        4 if "CUDAExecutionProvider" in ort.get_available_providers() else 2
+    )
+
+    # RAG services (Qdrant & Ollama)
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str | None = None
     qdrant_collection_name: str = "documents"
+
     ollama_url: str = "http://localhost:11434"
     embedding_provider: str = "ollama"
     embedding_model: str = "nomic-embed-text"
     embedding_dimensions: int = 768
     embedding_timeout: int = 30
+    embedding_max_concurrency: int = 2
+    embedding_batch_size: int = 16
+
     generation_model: str = "llama3.1:8b"
-    embedding_max_concurrency: int = 8
+    generation_timeout: int = 60
+
     qdrant_max_concurrent_requests: int = 8
-    embedding_batch_size: int = 64
     qdrant_batch_size: int = 64
     retrieval_score_threshold: float = 0.5
-    generation_timeout: int = 60
     hybrid_candidate_multiplier: int = 2
 
     top_k_search: int = 5
+    chunking_strategy: str = "recursive"
     rag_chunk_size: int = 500
     rag_chunk_overlap: int = 100
     tantivy_index_path: str = "./data/tantivy"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -61,14 +71,7 @@ class Settings(BaseSettings):
     def allowed_extensions_set(self) -> set[str]:
         """
         Convert comma separated extensions into a python set.
-        Runs only once at startup
-
-        example:
-         ".pdf,.txt,.md,.ppt" -> {".pdf",".txt",".md",".ppt"}
-
-         why:
-           - Set lookup is clean and fast.
-           - It keeps validation logic out of the route
+        Runs only once at startup.
         """
         return {
             ext.strip().lower()
@@ -79,13 +82,7 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def max_upload_bytes(self) -> int:
-        """
-        Convert MB to bytes.
-
-        why:
-            - uploaded files are measured in bytes.
-            - Humans prefer configuring files limits in MB
-        """
+        """Convert MB to bytes for file limit validations."""
         return self.max_upload_mb * 1024 * 1024
 
 

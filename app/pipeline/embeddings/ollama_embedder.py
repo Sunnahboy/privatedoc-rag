@@ -70,6 +70,13 @@ class OllamaEmbedder(BaseEmbedder):
 
         # call all http requests concurrently using asyncio.gather
         batches = self._split_batches(chunks)
+        # Process batches concurrently, but limit how many tasks are active at once
+        # to prevent overloading Ollama's internal connection pool on massive documents.
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+
+        async def bounded_process(batch: list[Chunk]) -> list[EmbeddingResult]:
+            async with semaphore:
+                return await self._process_batch(batch)
 
         # create onee task per batch
         tasks = [self._process_batch(batch) for batch in batches]
