@@ -8,6 +8,7 @@ from threading import Lock, Semaphore
 
 import numpy as np
 import onnxruntime as ort
+from app.config import settings
 from rapidocr_onnxruntime import RapidOCR
 
 from .base import BaseOCR
@@ -101,10 +102,9 @@ class RapidOCREngine(BaseOCR):
                 else:
                     cls._engine_instance = RapidOCR()
 
-                max_concurrent = int(
-                    os.environ.get("PDF_OCR_MAX_CONCURRENT", "4" if has_cuda else "2")
-                )
+                max_concurrent = settings.pdf_ocr_max_concurrent
                 cls._semaphore = Semaphore(max_concurrent)
+
                 logger.info("RapidOCR ready. Max concurrent: %d", max_concurrent)
 
     def extract(self, image: np.ndarray) -> str:
