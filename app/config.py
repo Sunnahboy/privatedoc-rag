@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Upload settings
     upload_dir: str = "../data/uploads"
-    max_upload_mb: int = 20
+    max_upload_mb: int = 300
     allowed_file_extensions: str = ".pdf,.txt,.md,.ppt,.docx"
     file_stream_chunk_size_bytes: int = 1024 * 1024  # 1MB
     chunking_strategy: Literal["fixed", "recursive"] = "recursive"

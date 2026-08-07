@@ -11,23 +11,56 @@ class TextCleaner(BaseCleaner):
     Initial text cleaner.
 
     Current responsibilities:
+    - Normalize line endings.
+    - Remove common PDF extraction artifacts.
+    - Trim trailing whitespace.
     - Collapse multiple blank lines.
 
     Future:
     - Unicode normalization
     - Header/footer removal
-    - Whitespace normalization
+    - Page number removal
+    - OCR cleanup
     """
 
     async def clean(self, extraction: ExtractionResult) -> CleaningResult:
-        original = extraction.text
+        original = extraction.text or ""
 
-        cleaned = re.sub(r"\n\s*\n+", "\n\n", original)
+        # Normalize line endings
+        cleaned = original.replace("\r\n", "\n").replace("\r", "\n")
+        # Remove common PDF extraction artifacts
+        cleaned = (
+            cleaned.replace("\ufeff", "")  # BOM
+            .replace("\u200b", "")  # Zero-width space
+            .replace("\u200c", "")  # Zero-width non-joiner
+            .replace("\u200d", "")  # Zero-width joiner
+            .replace("\xad", "")  # Soft hyphen
+            .replace("\x00", "")  # Null character
+        )
+        # Remove trailing spaces/tabs from each line
+        cleaned = re.sub(
+            r"[ \t]+$",
+            "",
+            cleaned,
+            flags=re.MULTILINE,
+        )
+        # Collapse multiple blank lines
+        cleaned = re.sub(
+            r"\n{3,}",
+            "\n\n",
+            cleaned,
+        )
 
-        removed = original.count("\n\n") - cleaned.count("\n\n")
+        removed = max(
+            original.count("\n\n") - cleaned.count("\n\n"),
+            0,
+        )
 
         return CleaningResult(
             text=cleaned,
             removed_blank_lines=max(removed, 0),
-            metadata={},
+            metadata={
+                "original_length": len(original),
+                "cleaned_length": len(cleaned),
+            },
         )
