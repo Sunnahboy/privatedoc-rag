@@ -1,7 +1,9 @@
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,10 +12,29 @@ from app.api.health import router as health_router
 from app.api.rag_router import router as rag_router
 from app.config import settings
 from app.database import init_db
+from app.pipeline.ocr import RapidOCREngine
 from app.utils.logging_utils import configure_logging
 
 configure_logging()
 logger = logging.getLogger(__name__)
+
+
+def _warmup_ocr() -> None:
+    try:
+        logger.info("Warming up RapidOCR & CUDA context...")
+        engine = RapidOCREngine()
+
+        # Create a large white image
+        dummy_img = np.full((1200, 1600, 3), 255, dtype=np.uint8)
+
+        
+        # This forces the text recognition model to load into VRAM.
+        dummy_img[500:600, 400:1200, :] = 0
+
+        engine.extract(dummy_img)
+        logger.info("RapidOCR warmed up successfully.")
+    except Exception:
+        logger.exception("Failed to warm up RapidOCR during startup.")
 
 
 # A lifespan context manager
@@ -34,6 +55,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # - Verify database connection
     # - Verify Qdrant connection
     # - Verify Ollama connection
+
+    # 1. Warm up the OCR engine in a separate thread
+    await asyncio.to_thread(_warmup_ocr)
+    # 2. Database initialization
     await init_db()
     logger.info("Database initialized")
 
