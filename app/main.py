@@ -11,7 +11,6 @@ from app.api.document import router as documents_router
 from app.api.health import router as health_router
 from app.api.rag_router import router as rag_router
 from app.config import settings
-from app.database import init_db
 from app.pipeline.ocr import RapidOCREngine
 from app.utils.logging_utils import configure_logging
 
@@ -59,7 +58,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 1. Warm up the OCR engine in a separate thread
     await asyncio.to_thread(_warmup_ocr)
     # 2. Database initialization
-    await init_db()
     logger.info("Database initialized")
 
     yield
