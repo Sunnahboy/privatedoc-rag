@@ -16,10 +16,19 @@ from app.utils.file_utils import (
     sanitize_filename,
     validate_file_extension,
 )
+from app.utils.hashing import calculate_upload_stream_hash
 from app.utils.id_id_utils import generate_document_id
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class DuplicateDocumentError(Exception):
+    """Raised when an uploaded document's SHA-256 hash already exists in the database."""
+
+    def __init__(self, existing_document_id: str):
+        self.existing_document_id = existing_document_id
+        super().__init__(f"Duplicate document. ID: {existing_document_id}")
 
 
 def _document_to_upload_response(document: Document) -> DocumentUploadResponse:
@@ -55,61 +64,27 @@ def _document_to_list_item(document: Document) -> DocumentListItem:
     )
 
 
-async def save_uploaded_document(
-    file: UploadFile, db: AsyncSession
-) -> DocumentUploadResponse:
+async def _save_file_to_disk(file: UploadFile, saved_path: Path) -> int:
     """
-    Validate , save  and persist metadata for an uploaded document asynchronously.
+    Safely reads an UploadFile in chunks and writes it to disk.
+    Enforces maximum size limits and cleans up upon failure.
 
-    Why async:
-    - Uploading files is I/O-bound.
-    - The server waits for file data and disk writes.
-    - Async lets the event loop handle other requests while this request waits.
-
-    Why chunked reading:
-    - Reading the entire file into memory is dangerous.
-    - Large files can waste RAM or crash the process.
-    - Chunked reading keeps memory usage predictable.
-     also:
-       -Raw files goes to local disk for now
-       -metadata goes to sqlite.
-       -Later, raw files can move to miniIO/s3
-       -Later, metadata DB can move to postgresSql
-
+    Returns:
+        int: The total size of the file in bytes.
     """
-
-    if file.filename is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must have a filename.",
-        )
-
-    original_filename = file.filename
-    safe_filename = sanitize_filename(original_filename)
-    validate_file_extension(safe_filename)
-    document_id = generate_document_id()
-    extension = get_file_extension(safe_filename)
-
-    Upload_dir = ensure_upload_dir()
-    # store as doc_id + original safe extension
-    stored_filename = f"{document_id}{extension}"
-    saved_path: Path = Upload_dir / stored_filename
-
     total_size = 0
+
     try:
         async with aiofiles.open(saved_path, "wb") as out_file:
             while True:
                 chunk = await file.read(settings.file_stream_chunk_size_bytes)
                 if not chunk:
                     break
+
                 total_size += len(chunk)
 
                 if total_size > settings.max_upload_bytes:
                     await out_file.close()
-                    saved_path.unlink(
-                        missing_ok=True
-                    )  # clean  up partially written oversized files.
-
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                         detail=f"File too large. Maximum allowed size is {settings.max_upload_mb} MB.",
@@ -117,45 +92,115 @@ async def save_uploaded_document(
 
                 await out_file.write(chunk)
 
-            if total_size == 0:
-                saved_path.unlink(missing_ok=True)
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Uploaded file is empty",
-                )
-
-            document = Document(
-                id=document_id,
-                original_filename=original_filename,
-                stored_filename=stored_filename,
-                file_extension=extension,
-                file_size_bytes=total_size,
-                storage_provider="local",
-                storage_key=stored_filename,
-                status="processing",
-                total_pages=0,
-                total_chunks=0,
+        if total_size == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file is empty",
             )
 
-            db.add(document)
+        return total_size
+
+    except Exception:
+        # Clean up partially written files if anything goes wrong during I/O
+        saved_path.unlink(missing_ok=True)
+        raise
+
+
+from sqlalchemy.exc import IntegrityError
+
+
+async def save_uploaded_document(
+    file: UploadFile, db: AsyncSession
+) -> DocumentUploadResponse:
+    """
+    Validate, save and persist metadata for an uploaded document asynchronously.
+    """
+    try:
+        if file.filename is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file must have a filename.",
+            )
+
+        original_filename = file.filename
+        safe_filename = sanitize_filename(original_filename)
+        validate_file_extension(safe_filename)
+        extension = get_file_extension(safe_filename)
+
+        # 1. Hash the incoming stream & check DB for duplicates
+        content_hash = await calculate_upload_stream_hash(file)
+
+        existing_query = await db.execute(
+            select(Document).where(Document.content_hash == content_hash)
+        )
+        existing_doc = existing_query.scalars().first()
+
+        if existing_doc:
+            # Raise the custom exception for the API router to catch and return 409
+            raise DuplicateDocumentError(existing_document_id=existing_doc.id)
+
+        # 2. Setup storage paths
+        document_id = generate_document_id()
+        upload_dir = ensure_upload_dir()
+        stored_filename = f"{document_id}{extension}"
+        saved_path: Path = upload_dir / stored_filename
+
+        # 3. Offload disk I/O to the helper function
+        total_size = await _save_file_to_disk(file, saved_path)
+
+        # 4. Save to Database
+        document = Document(
+            id=document_id,
+            original_filename=original_filename,
+            stored_filename=stored_filename,
+            file_extension=extension,
+            file_size_bytes=total_size,
+            content_hash=content_hash,
+            storage_provider="local",
+            storage_key=stored_filename,
+            status="processing",
+            total_pages=0,
+            total_chunks=0,
+        )
+
+        db.add(document)
+
+        try:
             await db.commit()
-            await db.refresh(document)
+        except IntegrityError:
+            # Race condition fallback: two users uploaded the same file simultaneously
+            await db.rollback()
+            saved_path.unlink(missing_ok=True)
 
-            await _process_document(
-                document=document,
-                saved_path=saved_path,
-                db=db,
+            race_query = await db.execute(
+                select(Document).where(Document.content_hash == content_hash)
             )
-            return _document_to_upload_response(document)
+            race_winner = race_query.scalars().first()
+            if race_winner:
+                return _document_to_upload_response(race_winner)
+            raise  # Re-raise if the error wasn't due to the uniqueness constraint
+
+        await db.refresh(document)
+
+        # 5. Route to heavy ingestion pipeline
+        await _process_document(
+            document=document,
+            saved_path=saved_path,
+            db=db,
+        )
+
+        return _document_to_upload_response(document)
 
     except HTTPException:
         raise
+    except DuplicateDocumentError:
+        raise
     except Exception:
-        # if db insert fails after file save, remove the saved file
-        saved_path.unlink(missing_ok=True)
+        # If DB insert fails after file save, remove the saved file
+        if "saved_path" in locals():
+            saved_path.unlink(missing_ok=True)
         await db.rollback()
         raise
-
     finally:
         await file.close()
 

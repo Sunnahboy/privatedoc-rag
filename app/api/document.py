@@ -11,6 +11,7 @@ from app.schemas.document_schema import (
     DocumentUploadResponse,
 )
 from app.services.document_service import (
+    DuplicateDocumentError,
     delete_document_by_id,
     list_documents,
     save_uploaded_document,
@@ -67,9 +68,15 @@ async def upload_document(
             result.filename,
             result.file_size_bytes,
         )
+
         return result
     except HTTPException:
         raise  # silently swallow the error
+    except DuplicateDocumentError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A document with this exact content already exists. Existing ID: {e.existing_document_id}",
+        )
     except Exception as exc:
         logger.exception(
             "unexpected document upload failure for filename: %s",

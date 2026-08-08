@@ -34,6 +34,16 @@ class Document(Base):
     file_extension: Mapped[str] = mapped_column(String(20), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
+
+    #ADDED FOR DEDUPLICATION 
+    content_hash: Mapped[str] = mapped_column(
+        String(64), 
+        unique=True, 
+        index=True, 
+        nullable=False
+    )
+   
+
     storage_provider: Mapped[str] = mapped_column(
         String(50), default="local", nullable=False
     )
