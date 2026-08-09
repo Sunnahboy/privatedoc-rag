@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     pdf_ocr_max_concurrent: int = (
         4 if "CUDAExecutionProvider" in ort.get_available_providers() else 2
     )
+    # Retrieval & Reranker settings
+    rrf_k: int = 60
+    reranker_model: str = "ms-marco-MiniLM-L-12-v2"
+    reranker_enabled: bool = True
 
     # RAG services (Qdrant & Ollama)
     qdrant_url: str = "http://localhost:6333"
