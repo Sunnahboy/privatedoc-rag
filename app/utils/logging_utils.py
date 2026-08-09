@@ -47,7 +47,8 @@ Retrieval
 ├── Query Embedding : %7.2f ms
 ├── Qdrant Search   : %7.2f ms
 ├── Sparse Search   : %7.2f ms
-└── RRF Fusion      : %7.2f ms
+├── RRF Fusion      : %7.2f ms
+└── Cross-Enc Rerank: %7.2f ms
 
 Generation
 ├── Context Chunks  : %7d
@@ -76,6 +77,7 @@ Request Total       : %7.2f ms
         timings.get("Qdrant Search", 0) * 1000,
         timings.get("Sparse Search", 0) * 1000,
         timings.get("RRF Fusion", 0) * 1000,
+        timings.get("Cross-Encoder Reranking", 0) * 1000,  # <-- Added here
         context_chunks,
         context_chars,
         prompt_chars,
