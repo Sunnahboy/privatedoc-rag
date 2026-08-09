@@ -28,6 +28,7 @@ dependencies = [
     "onnxruntime-gpu==1.19.2",
     "alembic>=1.19.0",
     "flashrank>=0.2.10",
+    "aio-pika>=10.0.1",
 ]
 [tool.setuptools.packages.find]
 exclude = ["alembic*"]
