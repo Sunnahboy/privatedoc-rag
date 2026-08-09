@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     )
     # Retrieval & Reranker settings
     rrf_k: int = 60
+    top_k_reranker: int = 5
     reranker_model: str = "ms-marco-MiniLM-L-12-v2"
     reranker_enabled: bool = True
 
