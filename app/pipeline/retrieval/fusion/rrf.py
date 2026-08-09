@@ -21,11 +21,18 @@ class RRFFusion(BaseFusion):
 
         for ranking in rankings:
             for rank, chunk in enumerate(ranking, start=1):
-                # Keep one copy of each chunk
-                chunk_lookup.setdefault(chunk.chunk_id, chunk)
+                if chunk.chunk_id not in chunk_lookup:
+                    # copy the chunk so  don't mutate the original object
+                    # in case it's being used elsewhere in memory.
+                    chunk_lookup[chunk.chunk_id] = (
+                        chunk.model_copy() if hasattr(chunk, "model_copy") else chunk
+                    )
 
                 # Reciprocal Rank Fusion score
                 scores[chunk.chunk_id] += 1.0 / (self.k + rank)
+        # Assign new fused score back to the chunk
+        for chunk_id, fused_score in scores.items():
+            chunk_lookup[chunk_id].score = fused_score
 
         # Sort by fused score (highest first)
         return sorted(

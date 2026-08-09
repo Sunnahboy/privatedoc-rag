@@ -10,9 +10,7 @@ class PromptBuilder:
         question: str,
         context: list[RetrievedChunk],
     ) -> str:
-        context_text = "\n\n".join(
-            f"[Chunk {chunk.chunk_index}] \n{chunk.text}" for chunk in context
-        )
+        context_text = "\n\n---\n\n".join(chunk.text.strip() for chunk in context)
         return self.template.format(
             context=context_text,
             question=question,
