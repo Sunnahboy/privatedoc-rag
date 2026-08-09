@@ -25,7 +25,7 @@ class BaseReranker(ABC):
 
     @abstractmethod
     def rerank(
-        self, query: str, chunks: list[RetrievedChunk], top_k: int = 5
+        self, query: str, chunks: list[RetrievedChunk], top_k: int  | None,
     ) -> list[RetrievedChunk]:
         """
         Takes a broad list of chunks and re-scores them against the query.
