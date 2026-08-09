@@ -27,6 +27,7 @@ dependencies = [
     "numpy",
     "onnxruntime-gpu==1.19.2",
     "alembic>=1.19.0",
+    "flashrank>=0.2.10",
 ]
 [tool.setuptools.packages.find]
 exclude = ["alembic*"]
