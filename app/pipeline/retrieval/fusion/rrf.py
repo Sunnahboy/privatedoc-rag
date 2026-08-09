@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from app.config import settings
 from app.pipeline.retrieval.models import RetrievedChunk
 
 from .base import BaseFusion
@@ -8,9 +9,9 @@ from .base import BaseFusion
 class RRFFusion(BaseFusion):
     def __init__(
         self,
-        k: int = 60,
+        k: int | None = None,
     ):
-        self.k = k
+        self.k = k if k is not None else settings.rrf_k
 
     def fuse(
         self,

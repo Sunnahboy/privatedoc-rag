@@ -6,8 +6,9 @@ from app.utils.profiler import profile
 
 from .bm25_retriever import BM25Retriever
 from .exceptions import RetrievalError
+from .flashrank_reranker import FlashRankReranker
 from .fusion.rrf import RRFFusion
-from .interface import BaseRetriever
+from .interface import BaseReranker, BaseRetriever
 from .models import RetrievalResult
 from .qdrant_retriever import QdrantRetriever
 
@@ -18,11 +19,13 @@ class HybridRetriever(BaseRetriever):
         dense: QdrantRetriever,
         sparse: BM25Retriever,
         fusion: RRFFusion | None = None,
+        reranker: BaseReranker | None = None,
     ):
         """Ensure configuration is decoupled."""
         self.dense = dense
         self.sparse = sparse
         self.fusion = fusion or RRFFusion()
+        self.reranker = reranker or FlashRankReranker()
 
     async def __aenter__(self) -> Self:
         return self
@@ -86,11 +89,15 @@ class HybridRetriever(BaseRetriever):
                     sparse_result.chunks,
                 )
 
-        
+            with profile("Cross-Encoder Reranking"):
+                # Pass the query, the broad fused chunks, and the final limit (e.g., 5)
+                final_chunks = self.reranker.rerank(
+                    query=query, chunks=fused_chunks, top_k=limit
+                )
 
         return RetrievalResult(
-            chunks=fused_chunks[:limit],
-            found=bool(fused_chunks),
+            chunks=final_chunks,
+            found=bool(final_chunks),
             message=None if fused_chunks else "No matching chunks found.",
             dense_hits=len(dense_result.chunks),
             sparse_hits=len(sparse_result.chunks),
