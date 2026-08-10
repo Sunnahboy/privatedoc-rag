@@ -83,16 +83,24 @@ The primary goal is to demonstrate practical AI engineering, backend architectur
 
 | Layer | Technology |
 |---|---|
-| Backend | Python, FastAPI |
-| Frontend | Next.js, TypeScript |
-| LLM Runtime | Ollama |
-| Embeddings | Ollama |
-| Vector Search | Qdrant |
+| Language | Python 3.11 |
+| API / Backend | FastAPI, Uvicorn |
+| Async HTTP | HTTPX |
+| Database | SQLite, SQLAlchemy, Alembic |
+| Vector Database | Qdrant |
 | Sparse Search | Tantivy / BM25 |
+| Embeddings | Ollama |
+| LLM Inference | Ollama |
 | Reranking | FlashRank |
-| Database | PostgreSQL |
-| Messaging | RabbitMQ |
-| OCR | RapidOCR / ONNX Runtime |
+| OCR | RapidOCR, ONNX Runtime |
+| Document Extraction | PyMuPDF, python-docx, python-pptx, Markdown-it |
+| Messaging | RabbitMQ, aio-pika |
+| Async File I/O | aiofiles |
+| Validation / Configuration | Pydantic Settings |
+| Testing | Pytest, pytest-asyncio |
+| ML / GPU Runtime | PyTorch, TorchVision, CUDA 12.4 |
+| Numerical Computing | NumPy |
+| Frontend | Next.js, TypeScript |
 | Deployment | Docker, Nginx |
 
 ## Architecture
