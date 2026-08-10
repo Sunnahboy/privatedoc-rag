@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     pdf_ocr_max_concurrent: int = (
         4 if "CUDAExecutionProvider" in ort.get_available_providers() else 2
     )
+    # background workers and RabbitExchange
+    DOCUMENT_EXCHANGE_NAME: str = "ingestion.direct"
+    DLX_EXCHANGE_NAME: str = "ingestion.dlx"
+    INGESTION_QUEUE_NAME: str = "document.ingest.queue"
+    INGESTION_ROUTING_KEY: str = "document.ingest"
+    MAX_RETRIES: int = 3  # worker
+    prefetch_count: int = 1
+
+    DLQ_NAME: str = "document.ingest.dlq"
+    DLQ_ROUTING_KEY: str = "document.ingest.dead"
     # Retrieval & Reranker settings
     rrf_k: int = 60
     top_k_reranker: int = 5
