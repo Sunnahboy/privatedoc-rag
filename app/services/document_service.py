@@ -2,9 +2,9 @@ from pathlib import Path
 
 import aiofiles
 from app.config import settings
+from app.messaging.publisher import publish_ingestion_job
 from app.models.document import Document
 from app.pipeline.indexing.composite_indexer import CompositeIndexer
-from app.pipeline.ingestion.pipeline import IngestionPipeline
 from app.schemas.document_schema import (
     DocumentDeleteResponse,
     DocumentListItem,
@@ -158,7 +158,7 @@ async def save_uploaded_document(
             content_hash=content_hash,
             storage_provider="local",
             storage_key=stored_filename,
-            status="processing",
+            status="pending",
             total_pages=0,
             total_chunks=0,
         )
@@ -183,10 +183,8 @@ async def save_uploaded_document(
         await db.refresh(document)
 
         # 5. Route to heavy ingestion pipeline
-        await _process_document(
-            document=document,
-            saved_path=saved_path,
-            db=db,
+        await publish_ingestion_job(
+            document_id=document.id, storage_key=document.storage_key
         )
 
         return _document_to_upload_response(document)
@@ -203,35 +201,6 @@ async def save_uploaded_document(
         raise
     finally:
         await file.close()
-
-
-async def _process_document(
-    document: Document,
-    saved_path: Path,
-    db: AsyncSession,
-) -> None:
-    """Execute the ingestion pipeline and update document status."""
-    pipeline = IngestionPipeline()
-
-    try:
-        result = await pipeline.ingest(
-            document_id=document.id,
-            file_path=saved_path,
-        )
-        document.status = "indexed"
-        document.total_chunks = result.total_chunks
-        document.total_pages = result.total_pages
-    except Exception:
-        await db.rollback()
-        document.status = "failed"
-        await db.commit()
-        await db.refresh(document)
-        raise
-    else:
-        await db.commit()
-        await db.refresh(document)
-    finally:
-        await pipeline.close()
 
 
 async def list_documents(db: AsyncSession) -> list[DocumentListItem]:
