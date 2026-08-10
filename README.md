@@ -1,212 +1,154 @@
 # PrivateDoc RAG
 
-PrivateDoc RAG is a self-hosted document intelligence system that lets users upload documents and ask grounded questions with source citations. It uses local LLM inference, local embeddings, vector search, and a full-stack web interface without relying on paid external AI APIs.
+PrivateDoc RAG is a self-hosted document intelligence system for uploading documents and asking grounded questions with source citations and previews.
 
-## Summary
+The system is designed around a privacy-first architecture: document processing, embeddings, retrieval, and LLM inference can run locally without sending document content to external AI APIs.
 
-This project is designed as a production-style Retrieval-Augmented Generation system, not a basic chatbot. It focuses on document ingestion, text extraction, chunking, embedding generation, semantic retrieval, citation-based answering, evaluation, and deployment.
+It is built as a production-style Retrieval-Augmented Generation (RAG) system rather than a basic chatbot, with separate ingestion, retrieval, generation, messaging, and infrastructure components.
 
-The goal is to build a practical AI engineering project that demonstrates backend development, retrieval design, local AI inference, full-stack integration, and production-style deployment.
+## Overview
+
+PrivateDoc RAG focuses on the complete lifecycle of document-based question answering:
+
+- Document ingestion and validation
+- Duplicate document detection
+- Text extraction and OCR
+- Text cleaning and chunking
+- Local embedding generation
+- Dense and sparse retrieval
+- Reciprocal Rank Fusion (RRF)
+- Cross-encoder reranking
+- Grounded LLM generation
+- Source citations and previews
+- Performance profiling
+- Quantitative RAG evaluation
+- Asynchronous background ingestion
+
+The primary goal is to demonstrate practical AI engineering, backend architecture, information retrieval, local AI inference, and production-oriented system design.
 
 ## Core Features
 
-* Document upload
-* PDF text extraction
-* Text cleaning and chunking
-* Local embedding generation
-* Vector search with Qdrant
-* Local LLM answering with Ollama
-* Source citations
-* Source preview
-* FastAPI backend
-* Next.js frontend
-* Docker-based deployment
-* RAG evaluation workflow
+### Document Ingestion
+
+- Document upload and validation
+- SHA-256 content hashing for duplicate detection
+- PDF, DOCX, PPTX, Markdown, and TXT extraction
+- OCR for image-based PDF pages
+- Text cleaning
+- Recursive chunking
+- Metadata tracking
+- Asynchronous ingestion architecture
+
+### Retrieval
+
+- Dense vector search with Qdrant
+- Sparse keyword search with Tantivy/BM25
+- Hybrid retrieval
+- Reciprocal Rank Fusion (RRF)
+- Cross-encoder reranking with FlashRank
+- Top-K context selection
+
+### Generation
+
+- Local LLM inference with Ollama
+- Grounded prompt construction
+- Context-restricted generation
+- Source citations
+- Source previews
+- Configurable generation model
+
+### Infrastructure
+
+- FastAPI backend
+- PostgreSQL metadata storage
+- Qdrant vector database
+- Tantivy sparse index
+- RabbitMQ messaging
+- Background ingestion workers
+- Docker-based deployment
+- Nginx
+- Centralized configuration
+- Structured logging
+- Pipeline profiling
+
+### Evaluation & Observability
+
+- Retrieval metrics
+- Answer quality evaluation
+- Pipeline latency profiling
+- Retrieval and generation timing
+- Debug information for retrieved chunks and scores
 
 ## Tech Stack
 
-* Python
-* FastAPI
-* Next.js
-* TypeScript
-* Qdrant
-* Ollama
-* PostgreSQL
-* Docker
-* Nginx
+| Layer | Technology |
+|---|---|
+| Language | Python 3.11 |
+| API / Backend | FastAPI, Uvicorn |
+| Async HTTP | HTTPX |
+| Database | SQLite, SQLAlchemy, Alembic |
+| Vector Database | Qdrant |
+| Sparse Search | Tantivy / BM25 |
+| Embeddings | Ollama |
+| LLM Inference | Ollama |
+| Reranking | FlashRank |
+| OCR | RapidOCR, ONNX Runtime |
+| Document Extraction | PyMuPDF, python-docx, python-pptx, Markdown-it |
+| Messaging | RabbitMQ, aio-pika |
+| Async File I/O | aiofiles |
+| Validation / Configuration | Pydantic Settings |
+| Testing | Pytest, pytest-asyncio |
+| ML / GPU Runtime | PyTorch, TorchVision, CUDA 12.4 |
+| Numerical Computing | NumPy |
+| Frontend | Next.js, TypeScript |
+| Deployment | Docker, Nginx |
 
 ## Architecture
 
 ```text
-User
-  ↓
-Next.js Frontend
-  ↓
-FastAPI Backend
-  ↓
-RAG Pipeline
-  ├── Document Parser
-  ├── Text Cleaner
-  ├── Chunker
-  ├── Embedder
-  ├── Vector Database
-  ├── Retriever
-  ├── Prompt Builder
-  └── Local LLM Generator
-        ↓
-Answer + Citations + Sources
-```
-
-## RAG Pipeline
-
-The system follows two main phases.
-
-### 1. Indexing Phase
-
-```text
-Document Upload
-  ↓
-File Validation
-  ↓
-Text Extraction
-  ↓
-Text Cleaning
-  ↓
-Chunking
-  ↓
-Local Embedding Generation
-  ↓
-Vector Storage in Qdrant
-  ↓
-Metadata Storage
-```
-
-### 2. Query Phase
-
-```text
-User Question
-  ↓
-Question Embedding
-  ↓
-Vector Search
-  ↓
-Relevant Chunk Retrieval
-  ↓
-Grounded Prompt Construction
-  ↓
-Local LLM Generation
-  ↓
-Answer + Citations + Source Preview
-```
-
-## Project Goals
-
-* Build a complete local RAG system
-* Avoid paid external LLM APIs
-* Make document Q&A more transparent with citations
-* Evaluate retrieval and answer quality
-* Deploy the system as a real full-stack AI application
-* Demonstrate AI engineering, backend development, retrieval design, and deployment skills
-
-## Planned API Endpoints
-
-```text
-GET     /health
-POST    /documents/upload
-GET     /documents
-DELETE  /documents/{document_id}
-POST    /chat
-GET     /evaluation
-```
-
-## Current Status
-
-**Milestone 1: Backend Skeleton**
-
-The project is currently in the initial backend setup stage. The first milestone focuses on creating a clean FastAPI structure with configuration, logging, health checks, and documentation.
-
-## Roadmap
-
-* [ ] FastAPI backend setup
-* [ ] Health endpoint
-* [ ] Document upload
-* [ ] PDF text extraction
-* [ ] Text cleaning
-* [ ] Text chunking
-* [ ] Local embeddings
-* [ ] Qdrant vector storage
-* [ ] Retrieval pipeline
-* [ ] Local LLM generation
-* [ ] Citation support
-* [ ] Source preview
-* [ ] Frontend upload page
-* [ ] Frontend chat page
-* [ ] Evaluation dashboard
-* [ ] Docker deployment
-* [ ] Demo video
-
-## Core File structure
-PrivateDoc RAG
-
-├── API Layer
-│
-├── Ingestion Pipeline
-│      Upload
-│      Extraction
-│      Cleaning
-│      Chunking
-│      Embedding
-│      Indexing
-│
-├── Retrieval Pipeline
-│      Query Embedding
-│      Hybrid Search
-│      Metadata Filter
-│      Reranking
-│
-├── Generation Pipeline
-│      Prompt Builder
-│      LLM
-│      Citations
-│
-├── Infrastructure
-│      Database
-│      Qdrant
-│      Ollama
-│      Logging
-│      Config
-│
-└── Evaluation & Monitoring
-       Metrics
-       Benchmarks
-       Observability
-
-## Advanced Roadmap
-
-After the standard RAG pipeline works, the system may be extended with:
-
-* CAG-inspired caching for repeated questions and document summaries.
-* CRAG-inspired retrieval confidence checking for dynamic evaluation.
-* GraphRAG-style relationship extraction and entity-based retrieval.
-* KAG-inspired mutual indexing linking unstructured text to structured knowledge.
-* KAG logical reasoning using semantic graphs for multi-step queries.
-* Hybrid search using both vector search and keyword search.
-* Reranking for better retrieval quality.
-* Developer debug mode showing retrieved chunks, similarity scores, and latency.
-
-## Why This Project Matters
-
-Many AI demos only show a chatbot interface. PrivateDoc RAG is designed to go deeper by showing how an AI system is engineered end-to-end:
-
-* How documents are processed
-* How knowledge is chunked and indexed
-* How embeddings are generated locally
-* How relevant context is retrieved
-* How answers are grounded in sources
-* How hallucination risk is reduced
-* How retrieval quality is evaluated
-* How the system is deployed
-
-## License
-
-This project is currently under active development.
+                         ┌──────────────────┐
+                         │      User        │
+                         └────────┬─────────┘
+                                  │
+                         ┌────────▼─────────┐
+                         │  Next.js Client  │
+                         └────────┬─────────┘
+                                  │
+                         ┌────────▼─────────┐
+                         │   FastAPI API    │
+                         └───────┬─┬────────┘
+                                 │ │
+                 ┌───────────────┘ └────────────────┐
+                 │                                  │
+        ┌────────▼─────────┐              ┌─────────▼─────────┐
+        │ Document Ingest │              │   RAG Retrieval   │
+        └────────┬─────────┘              └─────────┬─────────┘
+                 │                                  │
+        ┌────────▼─────────┐              ┌─────────▼─────────┐
+        │    RabbitMQ      │              │  Query Embedding  │
+        └────────┬─────────┘              └─────────┬─────────┘
+                 │                                  │
+        ┌────────▼─────────┐              ┌─────────▼─────────┐
+        │ Background Worker│              │ Hybrid Retrieval  │
+        └────────┬─────────┘              │ Qdrant + Tantivy  │
+                 │                        └─────────┬─────────┘
+        ┌────────▼─────────┐                        │
+        │ File Extraction  │              ┌─────────▼─────────┐
+        │ + OCR             │              │    RRF Fusion     │
+        └────────┬─────────┘              └─────────┬─────────┘
+                 │                                  │
+        ┌────────▼─────────┐              ┌─────────▼─────────┐
+        │ Cleaning         │              │ FlashRank Reranker │
+        │ Chunking         │              └─────────┬─────────┘
+        │ Embedding        │                        │
+        │ Indexing         │              ┌─────────▼─────────┐
+        └──────────────────┘              │ Context Selection │
+                                          └─────────┬─────────┘
+                                                    │
+                                          ┌─────────▼─────────┐
+                                          │ Ollama Generator  │
+                                          └─────────┬─────────┘
+                                                    │
+                                          ┌─────────▼─────────┐
+                                          │ Answer + Citations│
+                                          └───────────────────┘
