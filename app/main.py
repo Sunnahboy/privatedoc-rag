@@ -11,6 +11,7 @@ from app.api.document import router as documents_router
 from app.api.health import router as health_router
 from app.api.rag_router import router as rag_router
 from app.config import settings
+from app.messaging.connection import rabbitmq_manager
 from app.pipeline.ocr import RapidOCREngine
 from app.utils.logging_utils import configure_logging
 
@@ -26,7 +27,6 @@ def _warmup_ocr() -> None:
         # Create a large white image
         dummy_img = np.full((1200, 1600, 3), 255, dtype=np.uint8)
 
-        
         # This forces the text recognition model to load into VRAM.
         dummy_img[500:600, 400:1200, :] = 0
 
@@ -60,11 +60,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 2. Database initialization
     logger.info("Database initialized")
 
+    # Initialize RabbitMQ Manager so the channel pool is ready for publishers
+    await rabbitmq_manager.initialize()
+
     yield
 
     #    SHUTDOWN logic
     # TODO: cleanup code (i.e closing db connections)
     logger.info("Shutting down %s", settings.app_name)
+
+    # Gracefully close connections and drain the pool
+    await rabbitmq_manager.close()
 
 
 app = FastAPI(

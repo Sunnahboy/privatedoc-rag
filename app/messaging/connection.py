@@ -95,8 +95,6 @@ class RabbitMQManager:
             pool = Pool(
                 self._create_channel,
                 max_size=settings.rabbitmq_channel_pool_size,
-                constructor_args=None,
-                hasher=None,
             )
             try:
                 # Validate connection and channel readiness before setting state
