@@ -25,7 +25,7 @@ router = APIRouter(prefix="/document", tags=["Documents"])
 @router.post(
     "/upload",
     response_model=DocumentUploadResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def upload_document(
     file: Annotated[UploadFile, File(...)], db: Annotated[AsyncSession, Depends(get_db)]
