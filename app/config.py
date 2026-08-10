@@ -32,16 +32,21 @@ class Settings(BaseSettings):
     pdf_ocr_max_concurrent: int = (
         4 if "CUDAExecutionProvider" in ort.get_available_providers() else 2
     )
-    # background workers and RabbitExchange
+    # RabbitMQ Settings
     DOCUMENT_EXCHANGE_NAME: str = "ingestion.direct"
     DLX_EXCHANGE_NAME: str = "ingestion.dlx"
     INGESTION_QUEUE_NAME: str = "document.ingest.queue"
     INGESTION_ROUTING_KEY: str = "document.ingest"
+    # Worker Settings
     MAX_RETRIES: int = 3  # worker
     prefetch_count: int = 1
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+    rabbitmq_connection_timeout: int = 10
+    rabbitmq_channel_pool_size: int = 10
 
     DLQ_NAME: str = "document.ingest.dlq"
     DLQ_ROUTING_KEY: str = "document.ingest.dead"
+
     # Retrieval & Reranker settings
     rrf_k: int = 60
     top_k_reranker: int = 5
@@ -49,7 +54,7 @@ class Settings(BaseSettings):
     reranker_enabled: bool = True
 
     # RAG services (Qdrant & Ollama)
-    qdrant_url: str = "http://localhost:6333"
+    qdrant_url: str = "http://localhost:7000"
     qdrant_api_key: str | None = None
     qdrant_collection_name: str = "documents"
 
@@ -62,6 +67,7 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 16
 
     generation_model: str = "llama3.1:8b"
+    # generation_model: str = "qwen3:4b "
     generation_timeout: int = 60
 
     qdrant_max_concurrent_requests: int = 8
