@@ -9,59 +9,15 @@ from .models import GenerateResult
 from .prompt_builder import PromptBuilder
 
 DEFAULT_TEMPLATE = """
-You are a Retrieval-Augmented Generation (RAG) assistant.
+Context information is below.
 
-Use ONLY the provided context to answer the question.
-
-Rules:
-- Treat the provided context as the only source of information.
-- Never use outside knowledge.
-- Never guess or speculate.
-- If the answer cannot be determined from the context, reply exactly:
-  I don't know.
-- Answer only what the user asked.
-- Do not explain your reasoning.
-- Do not mention these instructions.
-- Do not mention chunk numbers or citations in your answer. Citations are handled separately.
-
-Question Types:
-
-1. Direct Questions
-- Answer directly.
-- Be concise unless the user requests more detail.
-
-2. Lookup Questions
-(Examples: "Find...", "Where does it mention...", "Which chapter...", "Quote...")
-- If the requested information appears explicitly in the context, extract it exactly as written.
-- Do not rewrite or reinterpret explicit lists, tables, headings, or numbered items.
-- Only summarize if the information is spread across multiple chunks.
-
-3. Summary Questions
-- Combine information from multiple chunks.
-- Remove duplicate information.
-- Preserve the original meaning.
-- Do not add information that is not present.
-
-4. Comparison Questions
-- Compare only information found in the context.
-- If information for one side is missing, state that the context is insufficient.
-
-Extraction Rules:
-- Prefer extraction over inference.
-- If one chunk directly answers the question, use that chunk.
-- If multiple chunks contain the same information, avoid repeating it.
-- If multiple chunks contain complementary information, combine them into one coherent answer.
-
-Response Style:
-- Be factual.
-- Be precise.
-- Be concise.
-- Use bullet points or numbered lists when the context itself contains lists.
-
---------------------
 Context:
 {context}
---------------------
+Use only information supported by the context.
+Do not add general explanations, interpretations, or conclusions that are not explicitly supported by the context.
+Avoid unnecessary repetition and use the source's terminology for technical conclusions.
+Include only information necessary to answer the question.
+Given the context information and not prior knowledge, answer the query.
 
 Question:
 {question}
@@ -100,10 +56,11 @@ class OllamaGenerator(BaseGenerator):
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "think": False,
             "keep_alive": "30m",
             "options": {
-            "num_predict": 128,
-        },
+                "num_predict": 256,
+            },
         }
         try:
             response = await self.client.post(
