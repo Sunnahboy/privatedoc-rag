@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from aio_pika import IncomingMessage
 from sqlalchemy import select
@@ -11,9 +12,11 @@ from app.messaging.queues import setup_queues_and_bindings
 from app.models.document import Document
 from app.pipeline.ingestion.pipeline import IngestionPipeline
 from app.utils.file_utils import ensure_upload_dir
-from app.utils.logging_utils import logging
+from app.utils.logging_utils import configure_logging
 
-logger = logging.getLogger("ingestion_worker")
+configure_logging()
+
+logger = logging.getLogger(__name__)
 
 
 async def process_job(message: IncomingMessage) -> None:
@@ -117,7 +120,7 @@ async def process_job(message: IncomingMessage) -> None:
 
 async def run_worker() -> None:
     """Starts the standalone worker looping using the RabbitMQ manager."""
-
+    logger.info("Starting ingestion worker...")
     # Initialize the connection manager
     await rabbitmq_manager.initialize()
 
