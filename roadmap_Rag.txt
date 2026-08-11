@@ -1,0 +1,53 @@
+Phase 1
+
+✔ BaseChunker
+✔ Chunk model
+✔ FixedChunker
+✔ Tests
+
+↓
+
+Embeddings
+
+↓
+
+Vector DB
+
+↓
+
+Retrieval
+
+↓
+
+Prompt Builder
+
+↓
+
+LLM
+
+↓
+
+Only then:
+
+✔ RecursiveChunker
+
+✔ SemanticChunker
+
+✔ MarkdownChunker
+
+✔ CodeChunker
+
+Phase	Status	Estimate
+Core ingestion (upload → indexing)	✅ Done	100%
+Retrieval	✅ Done	100%
+Generation	✅ Done	100%
+API orchestration	⏳	2–4 days
+Frontend integration	⏳	3–5 days
+Hybrid Search	⏳	3–5 days
+Reranking	⏳	2–4 days
+Caching	⏳	2–3 days
+Background indexing	⏳	3–5 days
+Evaluation framework	⏳	3–5 days
+Monitoring	⏳	2–4 days
+Docker + deployment polish	⏳	2–4 days
+Testing + documentation	⏳	4–7 days
