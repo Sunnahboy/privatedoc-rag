@@ -1,27 +1,25 @@
-# Local/environment files
+# Environment
 .env
 .env.*
-!.env.example
 
 # Python
 **/__pycache__/
 **/*.py[cod]
+**/.pytest_cache/
 **/.venv/
 **/*.egg-info/
 **/build/
 **/dist/
-**/wheels/
 
-# Frontend
-frontend/node_modules/
-frontend/.next/
-frontend/dist/
-
-# Local data/storage
+# Local data
 data/
+**/data/
 **/*.db
 **/*.sqlite
 **/*.sqlite3
+
+# Logs
+**/*.log
 
 # IDE
 .vscode/
@@ -30,6 +28,7 @@ data/
 # OS
 .DS_Store
 Thumbs.db
-
-# Logs
-**/*.log
+/docs/
+/PrivateDoc RAG Blueprint.docx
+/mermaid-diagram.png
+/roadmap_Rag.txt
