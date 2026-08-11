@@ -1,54 +1,35 @@
-# 1. Ignore everything at the root level
-*
+# Local/environment files
+.env
+.env.*
+!.env.example
 
-# 2. Allow tracking the gitignore file itself
-!.gitignore
-
-# 3. Allow Git to look inside these directories
-!backend/
-!frontend/
-
-# 4. Explicitly ensure everything inside them is un-ignored
-!backend/**
-!frontend/**
-
-
-# ==========================================
-# 2. APPLICATION & ENVIRONMENT SPECIFIC EXCLUSIONS
-# ==========================================
-# Python-generated files
+# Python
 **/__pycache__/
-**/*.py[oc]
+**/*.py[cod]
+**/.venv/
+**/*.egg-info/
 **/build/
 **/dist/
 **/wheels/
-**/*.egg-info
-**/*.pyo
-**/*.pyd
-**/*.Python
 
-# Environment files
-**/.env
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/dist/
 
-# Virtual environments
-**/.venv
-
-# Data & Documentation (Explicit overrides)
-**/data/
-**/docs/
-
-# OS-specific
-**/.DS_Store
-**/Thumbs.db
-
-# IDE-specific
-**/.vscode/
-**/.idea/
-
-# Logs
-**/*.log
-
-# Local databases
+# Local data/storage
+data/
 **/*.db
 **/*.sqlite
 **/*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+**/*.log
