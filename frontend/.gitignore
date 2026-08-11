@@ -1,0 +1,13 @@
+# Ignore absolutely everything by default
+*
+
+# Do not ignore the hidden .gitignore file itself
+!.gitignore
+
+# Allow tracking inside these specific directories
+!backend/
+!frontend/
+
+# Ensure all files and subfolders inside backend/ and frontend/ are tracked
+!backend/**
+!frontend/**
