@@ -29,4 +29,4 @@ jobs:
 
       - name: Run tests
         working-directory: backend
-        run: uv run pytest
+        run: uv run -m pytest
