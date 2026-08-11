@@ -1,35 +1,34 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# Environment
 .env
-.pyo
-.pyd
-.Python
-# Virtual environments
-.venv
+.env.*
 
-# Data
-data/uploads/*
-!data/uploads/.gitkeep
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.venv/
+**/*.egg-info/
+**/build/
+**/dist/
 
-# OS
-.DS_Store
-Thumbs.db
+# Local data
+data/
+**/data/
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Logs
+**/*.log
 
 # IDE
 .vscode/
 .idea/
 
-# Logs
-*.log
-
-# Local databases
-*.db
-*.sqlite
-*.sqlite3
-
-data/
+# OS
+.DS_Store
+Thumbs.db
+/docs/
+/PrivateDoc RAG Blueprint.docx
+/mermaid-diagram.png
+/roadmap_Rag.txt
