@@ -6,10 +6,100 @@
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Colors */
+  --color-secondary: #5c5f60;
+  --color-on-primary: #ffffff;
+  --color-on-primary-fixed-variant: #3c475a;
+  --color-on-primary-container: #8590a6;
+  --color-on-secondary: #ffffff;
+  --color-on-error: #ffffff;
+  --color-surface-container-low: #eff3ff;
+  --color-on-tertiary-fixed-variant: #44474a;
+  --color-surface-dim: #d0daef;
+  --color-surface: #f9f9ff;
+  --color-on-secondary-container: #626566;
+  --color-inverse-primary: #bcc7de;
+  --color-on-error-container: #93000a;
+  --color-surface-bright: #f9f9ff;
+  --color-on-background: #121c2a;
+  --color-background: #f9f9ff;
+  --color-inverse-surface: #273140;
+  --color-tertiary-container: #26292c;
+  --color-on-surface: #121c2a;
+  --color-inverse-on-surface: #ebf1ff;
+  --color-surface-tint: #545f73;
+  --color-surface-container-highest: #d9e3f7;
+  --color-tertiary: #111518;
+  --color-error-container: #ffdad6;
+  --color-primary-fixed-dim: #bcc7de;
+  --color-surface-container-high: #dee9fd;
+  --color-on-secondary-fixed-variant: #454748;
+  --color-outline: #75777d;
+  --color-tertiary-fixed-dim: #c4c7ca;
+  --color-primary-container: #1e293b;
+  --color-error: #ba1a1a;
+  --color-on-tertiary-fixed: #191c1f;
+  --color-primary-fixed: #d8e3fb;
+  --color-surface-variant: #d9e3f7;
+  --color-surface-container-lowest: #ffffff;
+  --color-secondary-fixed-dim: #c5c7c8;
+  --color-on-primary-fixed: #111c2d;
+  --color-surface-container: #e6eeff;
+  --color-on-surface-variant: #45474c;
+  --color-secondary-fixed: #e1e3e4;
+  --color-on-tertiary-container: #8d9094;
+  --color-on-secondary-fixed: #191c1d;
+  --color-secondary-container: #e1e3e4;
+  --color-on-tertiary: #ffffff;
+  --color-outline-variant: #c5c6cd;
+  --color-primary: #091426;
+  --color-tertiary-fixed: #e0e2e6;
+
+  /* Spacing */
+  --spacing-section-gap: 32px;
+  --spacing-page-margin: 48px;
+  --spacing-max-content-width: 820px;
+  --spacing-control-padding: 8px;
+  --spacing-element-gap: 16px;
+
+  /* Fonts */
+  --font-interface-sm: "Inter", sans-serif;
+  --font-display-lg: "Inter", sans-serif;
+  --font-label-caps: "Inter", sans-serif;
+  --font-headline-md: "Inter", sans-serif;
+  --font-reading-body: "Source Serif 4", serif;
+
+  /* Typography Settings */
+  --text-interface-sm: 14px;
+  --text-interface-sm--line-height: 20px;
+  --text-interface-sm--font-weight: 500;
+
+  --text-display-lg: 32px;
+  --text-display-lg--line-height: 40px;
+  --text-display-lg--letter-spacing: -0.02em;
+  --text-display-lg--font-weight: 600;
+
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 16px;
+  --text-label-caps--letter-spacing: 0.05em;
+  --text-label-caps--font-weight: 600;
+
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 32px;
+  --text-headline-md--letter-spacing: -0.01em;
+  --text-headline-md--font-weight: 500;
+
+  --text-reading-body: 18px;
+  --text-reading-body--line-height: 30px;
+  --text-reading-body--font-weight: 400;
+}
+
+/* Material Symbols configuration */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+.material-symbols-outlined[data-weight="fill"] {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
 @media (prefers-color-scheme: dark) {
