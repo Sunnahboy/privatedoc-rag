@@ -20,6 +20,7 @@ from app.utils.hashing import calculate_upload_stream_hash
 from app.utils.id_id_utils import generate_document_id
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -104,9 +105,6 @@ async def _save_file_to_disk(file: UploadFile, saved_path: Path) -> int:
         # Clean up partially written files if anything goes wrong during I/O
         saved_path.unlink(missing_ok=True)
         raise
-
-
-from sqlalchemy.exc import IntegrityError
 
 
 async def save_uploaded_document(
@@ -201,6 +199,23 @@ async def save_uploaded_document(
         raise
     finally:
         await file.close()
+
+
+async def get_document_by_id(document_id: str, db: AsyncSession) -> DocumentListItem | None:
+    """
+    Fetch a single document by its ID and return a DocumentListItem schema.
+    Used by the frontend polling mechanism to check upload status.
+    """
+    stmt = select(Document).where(Document.id == document_id)
+
+    result = await db.execute(stmt)
+    doc = result.scalar_one_or_none()
+
+    if not doc:
+        return None
+
+    # Convert ORM model to Pydantic response model to satisfy FastAPI response validation
+    return _document_to_list_item(doc)
 
 
 async def list_documents(db: AsyncSession) -> list[DocumentListItem]:
