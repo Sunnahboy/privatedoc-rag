@@ -13,6 +13,7 @@ from app.schemas.document_schema import (
 from app.services.document_service import (
     DuplicateDocumentError,
     delete_document_by_id,
+    get_document_by_id,
     list_documents,
     save_uploaded_document,
 )
@@ -92,19 +93,58 @@ async def upload_document(
     response_model=list[DocumentListItem],
     status_code=status.HTTP_200_OK,
 )
-async def get_documents(
+async def list_documents_endpoint(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[DocumentListItem]:
     """
-    List uploaded documents.
-
-    why:
-        -The frontend needs to show the available documents.
-        -The user needs to know what has been uploaded.
-        -Later, the user will choose which documents to chat with.
-
+    Return all uploaded documents. Defined before the detail route so FastAPI
+    doesn't treat the empty path as a document_id.
     """
-    return await list_documents(db=db)
+    try:
+        return await list_documents(db=db)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "Unexpected error listing documents: %s",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected error while listing documents.",
+        ) from exc
+
+
+@router.get(
+    "/{document_id}",
+    response_model=DocumentListItem,
+    status_code=status.HTTP_200_OK,
+)
+async def get_document(
+    document_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DocumentListItem:
+    """
+    Fetch a single document by ID. The service returns a DocumentListItem
+    schema (or None) so this router simply forwards that result or raises 404.
+    """
+    try:
+        doc = await get_document_by_id(document_id=document_id, db=db)
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document {document_id} not found.",
+            )
+        return doc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "Unexpected error fetching document_id: %s",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected error while fetching document.",
+        ) from exc
 
 
 @router.delete(
