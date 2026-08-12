@@ -32,3 +32,8 @@ Thumbs.db
 /PrivateDoc RAG Blueprint.docx
 /mermaid-diagram.png
 /roadmap_Rag.txt
+# AI Assistant and Local Notes
+AGENTS.md
+CLAUDE.md
+*.md
+!README.md
