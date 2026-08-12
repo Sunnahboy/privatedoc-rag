@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python / FastAPI
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Node / Next.js
+node_modules/
+npm-debug.log
+yarn-error.log
+.next/
+out/
+
+# Environment variables & Secrets
+.env
+.env.*
+*.pem
+credentials.json
+
+# Local databases and vector storage
+# (We don't want to bake local state into the image)
+backend/data/
+*.db
+*.sqlite3
+
+# OS Files
+.DS_Store
+Thumbs.db
