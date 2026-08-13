@@ -29,6 +29,7 @@ dependencies = [
     "alembic>=1.19.0",
     "flashrank>=0.2.10",
     "aio-pika>=10.0.1",
+    "asyncpg>=0.31.0",
 ]
 [tool.setuptools.packages.find]
 exclude = ["alembic*"]
