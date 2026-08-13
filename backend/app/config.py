@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     file_stream_chunk_size_bytes: int = 1024 * 1024  # 1MB
 
     # Metadata database
-    database_url: str = "sqlite+aiosqlite:///./privatedoc.db"
+    database_url: str = "sqlite+aiosqlite:///./privatedoc.db" #dummy
     database_echo: bool = False
 
     # Extraction & OCR settings

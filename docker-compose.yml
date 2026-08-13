@@ -20,8 +20,20 @@ services:
       - "127.0.0.1:7001:6334"    # gRPC API 
     volumes:
       - qdrant_data:/qdrant/storage
+  postgres:
+    image: postgres:16
+    container_name: privatedoc_postgres
+    environment:
+      POSTGRES_DB: privatedoc
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
 
 volumes:
   rabbitmq_data:
   qdrant_data:
+  postgres_data:
