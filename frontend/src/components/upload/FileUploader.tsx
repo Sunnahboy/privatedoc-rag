@@ -6,7 +6,8 @@ import { MAX_FILE_SIZE_MB, MAX_FILE_SIZE_BYTES, ERROR_MESSAGES } from "@/lib/con
 
 export function FileUploader({ onUploadComplete }: { onUploadComplete?: () => Promise<void> | void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { status, document, error, uploadFile, reset } = useDocumentUpload();
+  // Pass the parent's callback into the hook so it is triggered as soon as the uploader detects success
+  const { status, document, error, uploadFile, reset } = useDocumentUpload(onUploadComplete);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -21,12 +22,20 @@ export function FileUploader({ onUploadComplete }: { onUploadComplete?: () => Pr
     }
   };
 
+  // Clear the native file input when the upload finishes successfully so the UI is fully reset
   useEffect(() => {
-    if (status === "success" && typeof onUploadComplete === "function") {
-      // call but don't block UI; swallow errors
-      Promise.resolve(onUploadComplete()).catch((err) => console.error("onUploadComplete error:", err));
+    if (status === "success") {
+      try {
+        if (fileInputRef.current) {
+          // clearing a file input value is the supported way to reset its state
+          fileInputRef.current.value = "";
+        }
+      } catch (err) {
+        // Not fatal — continue and let parent re-fetch documents
+        console.error("Failed to clear file input after upload success:", err);
+      }
     }
-  }, [status, onUploadComplete]);
+  }, [status]);
 
   return (
     <div className="w-full">
