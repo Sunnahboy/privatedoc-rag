@@ -68,7 +68,7 @@ class PDFExtractor(BaseExtractor):
 
             if total_pages == 0:
                 return ExtractionResult(
-                    text="",
+                    pages=[],
                     total_pages=0,
                     metadata=metadata,
                 )
@@ -111,7 +111,7 @@ class PDFExtractor(BaseExtractor):
             )
 
             return ExtractionResult(
-                text="\n\n".join(filter(None, pages)).strip(),
+                pages=pages,
                 total_pages=total_pages,
                 metadata=metadata,
             )

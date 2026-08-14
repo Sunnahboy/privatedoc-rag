@@ -13,6 +13,6 @@ class CleaningResult:
     for chunking.
     """
 
-    text: str
+    pages:list[str]
     removed_blank_lines: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)

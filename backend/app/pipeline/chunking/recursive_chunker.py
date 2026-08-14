@@ -68,7 +68,7 @@ class RecursiveChunker(BaseChunker):
 
     async def chunk(self, cleaning_result: CleaningResult) -> list[Chunk]:
         """
-        Split the cleaned document into chunks with absolute source offsets.
+        Split the cleaned document into chunks per page.
 
         Offsets are measured against the original `cleaning_result.text`,
         not against a trimmed copy.
@@ -77,22 +77,32 @@ class RecursiveChunker(BaseChunker):
         the behavior of the previous `.strip()`-based implementation while
         keeping offsets truthful to the original source document.
         """
-        text = cleaning_result.text or ""
-        content_start, content_end = self._content_bounds(text)
+        # Fallback for older documents that might just have a flat text string
+        pages = getattr(cleaning_result, "pages", None)
+        if not pages:
+            pages = [getattr(cleaning_result, "text", "")]
 
-        if content_start == content_end:
-            return []
+        all_chunks: list[Chunk] = []
 
-        chunks: list[Chunk] = []
-        self._split_span(
-            text=text,
-            start=content_start,
-            end=content_end,
-            separator_index=0,
-            chunks=chunks,
-            prefix_start=None,
-        )
-        return chunks
+        for page_idx, page_text in enumerate(pages):
+            content_start, content_end = self._content_bounds(page_text)
+
+            if content_start == content_end:
+                continue
+
+            page_number = page_idx + 1
+
+            self._split_span(
+                text=page_text,
+                start=content_start,
+                end=content_end,
+                separator_index=0,
+                chunks=all_chunks,
+                prefix_start=None,
+                page_number=page_number,
+            )
+
+        return all_chunks
 
     # ------------------------------------------------------------------
     # Core recursive splitting
@@ -297,6 +307,7 @@ class RecursiveChunker(BaseChunker):
         start: int,
         end: int,
         chunks: list[Chunk],
+        page_number: int,
     ) -> _Span:
         """
         Append a Chunk with exact absolute offsets.
@@ -316,6 +327,7 @@ class RecursiveChunker(BaseChunker):
                 text=text[start:end],
                 start_char=start,
                 end_char=end,
+                page_number=page_number,
             )
         )
         return _Span(start, end)
