@@ -5,6 +5,7 @@ from app.pipeline.chunking.models import Chunk
 from app.pipeline.retrieval.models import RetrievedChunk
 from app.utils.logging_utils import logging
 from tantivy import Document, Index, SchemaBuilder
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from .interface import BaseSparseIndex
 
@@ -17,7 +18,7 @@ class TantivyIndexer(BaseSparseIndex):
         self.index_path = Path(index_path or settings.tantivy_index_path)
 
         self.index = None
-        self.writer = None
+
         builder = SchemaBuilder()
 
         self.document_id = builder.add_text_field(
@@ -46,9 +47,14 @@ class TantivyIndexer(BaseSparseIndex):
                 self.schema,
                 path=str(self.index_path),
             )
-        self.writer = self.index.writer()
+
         self.searcher = self.index.searcher()
 
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_random_exponential(multiplier=1, max=10),
+        reraise=True,
+    )
     async def add_documents(
         self,
         chunks: list[Chunk],
@@ -57,6 +63,7 @@ class TantivyIndexer(BaseSparseIndex):
         - writes them to the index,
         - After commit(), the documents become searchable,
         - A new Searcher  queries  latest index."""
+        writer = self.index.writer()
         for chunk in chunks:
             doc = Document(
                 document_id=chunk.document_id,
@@ -64,8 +71,8 @@ class TantivyIndexer(BaseSparseIndex):
                 chunk_index=chunk.chunk_index,
                 text=chunk.text,
             )
-            self.writer.add_document(doc)
-        self.writer.commit()
+            writer.add_document(doc)
+        writer.commit()
         self.index.reload()
         self.searcher = self.index.searcher()
 
@@ -104,15 +111,22 @@ class TantivyIndexer(BaseSparseIndex):
             )
         return results
 
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_random_exponential(multiplier=1, max=10),
+        reraise=True,
+    )
     async def delete_document(
         self,
         document_id: str,
     ) -> None:
-        self.writer.delete_documents(
+        # acquire the lock when deleting as well
+        writer = self.index.writer()
+        writer.delete_documents(
             "document_id",
             document_id,
         )
-        self.writer.commit()
+        writer.commit()
         self.index.reload()
         self.searcher = self.index.searcher()
 
