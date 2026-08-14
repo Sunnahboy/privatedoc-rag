@@ -5,7 +5,6 @@ import { FileUploader } from "@/components/upload/FileUploader";
 import { RagChat } from "@/components/chat/RagChat";
 import { DocumentList } from "@/components/documents/DocumentList";
 import { useDocuments } from "@/hooks/useDocuments";
-
 export default function Home() {
   const { documents, isLoading, fetchDocuments, deleteDocument } = useDocuments();
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
@@ -58,7 +57,7 @@ export default function Home() {
 
           {/* Right Column: Chat */}
           <div className="lg:col-span-2">
-            <RagChat selectedDocIds={selectedDocIds} />
+            <RagChat />
           </div>
 
         </div>

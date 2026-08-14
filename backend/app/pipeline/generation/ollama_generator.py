@@ -14,10 +14,12 @@ Context information is below.
 Context:
 {context}
 Use only information supported by the context.
-Do not add general explanations, interpretations, or conclusions that are not explicitly supported by the context.
-Avoid unnecessary repetition and use the source's terminology for technical conclusions.
-Include only information necessary to answer the question.
-Given the context information and not prior knowledge, answer the query.
+You may synthesize, combine, and explain relationships between 
+ideas across different context chunks.
+Provide necessary background or explanatory context when it 
+helps clarify the answer, as long as it remains grounded in 
+the provided sources.
+
 
 Question:
 {question}

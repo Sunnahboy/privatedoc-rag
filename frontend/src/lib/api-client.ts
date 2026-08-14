@@ -63,7 +63,7 @@ export const  apiClient ={
     /**
    * Sends a RAG query to the backend.
    */
-  async askQuestion(query: string, documentIds?: string[]): Promise<RagResponse> {
+  async askQuestion(query: string, documentIds?: string[], signal?: AbortSignal): Promise<RagResponse> {
     
     // Translate frontend state into the exact backend schema
     const payload = {
@@ -79,6 +79,7 @@ export const  apiClient ={
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload), // Send the translated payload
+      signal,
     });
 
     if (!response.ok) {
@@ -86,7 +87,7 @@ export const  apiClient ={
     }
 
     return response.json();
-  },
+  }, 
    /**
    * Fetches all uploaded documents from the database.
    */

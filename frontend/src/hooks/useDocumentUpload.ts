@@ -3,7 +3,7 @@ import { apiClient, DocumentListItem } from "@/lib/api-client";
 import { UPLOAD_POLLING_INTERVAL_MS, ERROR_MESSAGES } from "@/lib/constants";
 export type UploadState = "idle" | "uploading" | "polling" | "success" | "error";
 
-export function useDocumentUpload() {
+export function useDocumentUpload(onSuccess?:()=>void) {
     const [status, setStatus] = useState<UploadState>("idle");
     const [document, setDocument] = useState<DocumentListItem | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -24,6 +24,16 @@ export function useDocumentUpload() {
                     if (latestDoc.status === "indexed") {
                         setStatus("success");
                         clearInterval(pollInterval);
+                        // 3. Trigger the callback to tell the page to refresh!
+                        if (onSuccess) {
+                            onSuccess();
+                        }
+
+                        // 4. Reset the UI back to normal after 2 seconds
+                        setTimeout(() => {
+                        setStatus("idle"); // Use whatever your default status is (e.g., "idle" or "ready")
+                        setDocument(null); // Fixed the name based on your TS error!
+                        }, 2000);
                     } else if (latestDoc.status === "failed") {
                         setStatus("error");
                         setError("The background worker failed to process this document.");

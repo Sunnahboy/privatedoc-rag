@@ -9,9 +9,17 @@ export function useRAGQuery() {
 
   // askQuestion can be used as a form submit handler (askQuestion(e))
     // or called programmatically with selected doc ids (askQuestion(undefined, selectedDocIds))
-    const askQuestion = async (e?: React.SyntheticEvent, selectedDocIds?: string[]) => {
+    // askQuestion: optional event, optional selectedDocIds, optional explicitQuery override
+    const askQuestion = async (
+      e?: React.SyntheticEvent,
+      selectedDocIds?: string[],
+      explicitQuery?: string,
+      signal?: AbortSignal,
+    ) => {
       if (e && typeof (e as React.SyntheticEvent).preventDefault === "function") e.preventDefault();
-      if (!query.trim()) return;
+
+      const q = typeof explicitQuery === 'string' ? explicitQuery : query;
+      if (!q || !q.trim()) return null;
 
       try {
         setIsLoading(true);
@@ -19,12 +27,21 @@ export function useRAGQuery() {
         setResponse(null); // Clear previous answer
 
         const docs = selectedDocIds && selectedDocIds.length > 0 ? selectedDocIds : undefined;
-        const result = await apiClient.askQuestion(query, docs);
+        const result = await apiClient.askQuestion(q, docs, signal);
         setResponse(result);
+        return result;
 
       } catch (err: unknown) {
+        // If the request was aborted, don't treat as an error to show to the user
+        const isAbort = typeof err === 'object' && err !== null && (err as any).name === 'AbortError';
+        if (isAbort) {
+          // Keep error state untouched for aborts
+          return null;
+        }
         setError(err instanceof Error ? err.message : "Failed to get an answer.");
+        return null;
       } finally {
+        // Always unlock the input even if network call fails or throws.
         setIsLoading(false);
       }
     };
