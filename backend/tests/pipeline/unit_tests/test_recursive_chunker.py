@@ -6,7 +6,7 @@ from app.pipeline.cleaning.models import CleaningResult
 
 
 def clean(text: str) -> CleaningResult:
-    return CleaningResult(text=text)
+    return CleaningResult(pages=[text],)
 
 
 # ==========================================================

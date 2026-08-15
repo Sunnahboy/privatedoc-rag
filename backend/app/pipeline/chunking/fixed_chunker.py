@@ -24,7 +24,7 @@ class FixedChunker(BaseChunker):
         self,
         cleaning_result: CleaningResult,
     ) -> list[Chunk]:
-        text = cleaning_result.text
+        text = "\n\n".join(cleaning_result.pages)
         chunks: list[Chunk] = []
         stride = self.chunk_size - self.overlap
 
@@ -34,7 +34,7 @@ class FixedChunker(BaseChunker):
             chunks.append(
                 Chunk(
                     chunk_id=str(uuid.uuid4()),
-                    document_id="",# Assigned later by IngestionPipeline
+                    document_id="",  # Assigned later by IngestionPipeline
                     chunk_index=index,  # current loop index
                     text=text[start:end],
                     start_char=start,
