@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     file_stream_chunk_size_bytes: int = 1024 * 1024  # 1MB
 
     # Metadata database
-    database_url: str = "sqlite+aiosqlite:///./privatedoc.db" #dummy
+    database_url: str = "sqlite+aiosqlite:///./privatedoc.db"  # dummy
     database_echo: bool = False
 
     # Extraction & OCR settings
@@ -62,8 +62,8 @@ class Settings(BaseSettings):
     embedding_provider: str = "ollama"
     embedding_model: str = "nomic-embed-text"
     embedding_dimensions: int = 768
-    embedding_timeout: int = 30
-    embedding_max_concurrency: int = 2
+    embedding_timeout: int = 120
+    embedding_max_concurrency: int = 1
     embedding_batch_size: int = 16
 
     generation_model: str = "llama3.1:8b"
