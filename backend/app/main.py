@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.document import router as documents_router
 from app.api.health import router as health_router
 from app.api.rag_router import router as rag_router
+from app.api.reader_router import router as reader_router
 from app.config import settings
 from app.messaging.connection import rabbitmq_manager
 from app.pipeline.ocr import RapidOCREngine
@@ -98,6 +99,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(documents_router)
 app.include_router(rag_router)
+app.include_router(reader_router)
 
 
 @app.get("/")
