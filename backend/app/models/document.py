@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from app.database import Base
-from sqlalchemy import BigInteger, DateTime, Integer, String
+from sqlalchemy import JSON, BigInteger, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -34,15 +35,10 @@ class Document(Base):
     file_extension: Mapped[str] = mapped_column(String(20), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-
-    #ADDED FOR DEDUPLICATION 
+    # ADDED FOR DEDUPLICATION
     content_hash: Mapped[str] = mapped_column(
-        String(64), 
-        unique=True, 
-        index=True, 
-        nullable=False
+        String(64), unique=True, index=True, nullable=False
     )
-   
 
     storage_provider: Mapped[str] = mapped_column(
         String(50), default="local", nullable=False
@@ -53,7 +49,7 @@ class Document(Base):
 
     total_pages: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-
+    toc: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,

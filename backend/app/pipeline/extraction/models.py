@@ -16,4 +16,5 @@ class ExtractionResult:
 
     pages: list[str]
     total_pages: int
+    toc: list[dict[str, Any]] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)

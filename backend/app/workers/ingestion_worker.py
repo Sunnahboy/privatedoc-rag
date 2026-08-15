@@ -63,6 +63,9 @@ async def process_job(message: IncomingMessage) -> None:
                 doc.status = "indexed"
                 doc.total_chunks = ingestion_result.total_chunks
                 doc.total_pages = ingestion_result.total_pages
+                doc.toc = ingestion_result.toc
+                # ADD THIS DEBUG PRINT:
+                print(f"DEBUG TOC: {len(doc.toc) if doc.toc else 'None'} items found!")
                 await db.commit()
                 logger.info("Successfully indexed document %s", document_id)
                 await message.ack()  # manually ack successful run
