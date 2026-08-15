@@ -8,6 +8,7 @@ class RetrievedChunk:
     chunk_index: int
     text: str
     score: float
+    page_number: int | None = None
 
 
 @dataclass(slots=True)

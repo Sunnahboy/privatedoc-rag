@@ -63,7 +63,7 @@ class TextCleaner(BaseCleaner):
             pages = [extraction.text]
 
         for page_text in pages:
-            cleaned, removed, orig_len, clean_len = self._clean_single_page(page_text)
+            cleaned, removed, orig_len, clean_len = await self._clean_single_page(page_text)
             cleaned_pages.append(cleaned)
             total_removed_lines += removed
             total_original_length += orig_len

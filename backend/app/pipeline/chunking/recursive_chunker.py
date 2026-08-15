@@ -117,6 +117,7 @@ class RecursiveChunker(BaseChunker):
         separator_index: int,
         chunks: list[Chunk],
         prefix_start: int | None,
+        page_number: int,
     ) -> _Span | None:
         """
         Recursively split the absolute span [start, end) and emit Chunk objects.
@@ -160,7 +161,11 @@ class RecursiveChunker(BaseChunker):
                 prefix_start=prefix_start,
             )
             return self._emit_chunk(
-                text=text, start=chunk_start, end=end, chunks=chunks
+                text=text,
+                start=chunk_start,
+                end=end,
+                chunks=chunks,
+                page_number=page_number,
             )
 
         # Base case: no finer separators remain -> hard split.
@@ -174,6 +179,7 @@ class RecursiveChunker(BaseChunker):
                 end=end,
                 chunks=chunks,
                 prefix_start=prefix_start,
+                page_number=page_number,
             )
 
         separator = self.separators[separator_index]
@@ -195,6 +201,7 @@ class RecursiveChunker(BaseChunker):
                         start=current_start,
                         end=current_end,
                         chunks=chunks,
+                        page_number=page_number,
                     )
                     current_start = None
 
@@ -208,6 +215,7 @@ class RecursiveChunker(BaseChunker):
                         previous_emitted=previous_emitted,
                         incoming_prefix=prefix_start,
                     ),
+                    page_number=page_number,
                 )
                 continue
 
@@ -235,6 +243,7 @@ class RecursiveChunker(BaseChunker):
                 start=current_start,
                 end=current_end,
                 chunks=chunks,
+                page_number=page_number,
             )
             current_start = self._bounded_start(
                 end=part.end,
@@ -249,6 +258,7 @@ class RecursiveChunker(BaseChunker):
                 start=current_start,
                 end=current_end,
                 chunks=chunks,
+                page_number=page_number,
             )
 
         return previous_emitted
@@ -265,6 +275,7 @@ class RecursiveChunker(BaseChunker):
         end: int,
         chunks: list[Chunk],
         prefix_start: int | None,
+        page_number: int,
     ) -> _Span | None:
         """
         Emit fixed-size overlapping windows for [start, end).
@@ -287,6 +298,7 @@ class RecursiveChunker(BaseChunker):
                 start=window_start,
                 end=window_end,
                 chunks=chunks,
+                page_number=page_number,
             )
 
             if window_end == end:
