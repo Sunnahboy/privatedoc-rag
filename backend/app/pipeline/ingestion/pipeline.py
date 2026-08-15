@@ -140,6 +140,7 @@ class IngestionPipeline(BaseIngestionPipeline):
                 indexing=indexing_result,
                 total_chunks=benchmark.chunk_count,
                 total_pages=extraction.total_pages,
+                toc=extraction.toc,
             )
 
         except IngestionError as exc:

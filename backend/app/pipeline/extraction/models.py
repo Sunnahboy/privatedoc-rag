@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -13,6 +14,7 @@ class ExtractionResult:
     from file type.
     """
 
-    text: str
+    pages: list[str]
     total_pages: int
-    metadata: dict
+    toc: list[dict[str, Any]] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)

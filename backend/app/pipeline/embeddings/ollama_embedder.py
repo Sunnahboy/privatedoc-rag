@@ -168,6 +168,8 @@ class OllamaEmbedder(BaseEmbedder):
                     vector=vector,
                     model_name=self.model,
                     dimensions=len(vector),
+                    page_number=chunk.page_number,
+                    metadata={},
                 )
             )
         print(f"Processing batch {batch[0].chunk_index} - {batch[-1].chunk_index}")

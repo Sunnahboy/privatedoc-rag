@@ -83,6 +83,7 @@ class QdrantIndexer(BaseIndexer):
             payload={
                 "document_id": str(embedding.document_id),
                 "chunk_index": embedding.chunk_index,
+                "page_number": embedding.page_number,
                 "text": embedding.text,
                 "model_name": embedding.model_name,
             },

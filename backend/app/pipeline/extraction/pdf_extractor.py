@@ -64,12 +64,20 @@ class PDFExtractor(BaseExtractor):
                 total_pages = document.page_count
                 metadata = dict(document.metadata)
 
+                # EXTRACT AND FORMAT THE TOC
+                raw_toc = document.get_toc()
+                formatted_toc = [
+                    {"level": item[0], "title": item[1], "page_number": item[2]}
+                    for item in raw_toc
+                ]
+
             print(f"[PDF] {file_path.name}: {total_pages} page(s) detected.")
 
             if total_pages == 0:
                 return ExtractionResult(
-                    text="",
+                    pages=[],
                     total_pages=0,
+                    toc=formatted_toc,
                     metadata=metadata,
                 )
 
@@ -111,8 +119,9 @@ class PDFExtractor(BaseExtractor):
             )
 
             return ExtractionResult(
-                text="\n\n".join(filter(None, pages)).strip(),
+                pages=pages,
                 total_pages=total_pages,
+                toc=formatted_toc,
                 metadata=metadata,
             )
 
