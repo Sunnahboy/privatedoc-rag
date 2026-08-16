@@ -4,7 +4,12 @@ import { useRef, useEffect } from "react";
 import { useDocumentUpload } from "@/hooks/useDocumentUpload";
 import { MAX_FILE_SIZE_MB, MAX_FILE_SIZE_BYTES, ERROR_MESSAGES } from "@/lib/constants";
 
-export function FileUploader({ onUploadComplete }: { onUploadComplete?: () => Promise<void> | void }) {
+interface FileUploaderProps {
+  onUploadComplete?: () => Promise<void> | void;
+  compact?: boolean;
+}
+
+export function FileUploader({ onUploadComplete, compact = false }: FileUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Pass the parent's callback into the hook so it is triggered as soon as the uploader detects success
   const { status, document, error, uploadFile, reset } = useDocumentUpload(onUploadComplete);
@@ -43,7 +48,9 @@ export function FileUploader({ onUploadComplete }: { onUploadComplete?: () => Pr
       {status === "idle" && (
         <div 
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center cursor-pointer hover:bg-gray-50 transition-colors"
+          className={`cursor-pointer rounded-xl border-2 border-dashed border-gray-300 text-center transition-colors hover:bg-gray-50 ${
+            compact ? "p-6" : "p-12"
+          }`}
         >
           <input
             type="file"
@@ -53,10 +60,10 @@ export function FileUploader({ onUploadComplete }: { onUploadComplete?: () => Pr
             onChange={handleFileChange}
           />
           <div className="text-gray-500">
-            <svg className="mx-auto h-12 w-12 mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className={`mx-auto mb-4 text-gray-400 ${compact ? "h-8 w-8" : "h-12 w-12"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
-            <p className="font-medium text-lg">Click to upload a PDF</p>
+            <p className={`font-medium ${compact ? "text-base" : "text-lg"}`}>Click to upload a PDF</p>
             <p className="text-sm mt-1">Maximum file size {MAX_FILE_SIZE_MB}MB</p>
           </div>
         </div>
