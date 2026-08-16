@@ -50,6 +50,6 @@ async def get_document_file(document_id: str, db: DbSession):
         path=file_path,
         media_type="application/pdf",
         filename=doc.original_filename,
-        # Required for Next.js react-pdf to read the file properly!
+        # Required for Next.js react-pdf to read 
         headers={"Access-Control-Expose-Headers": "Accept-Ranges, Content-Length"},
     )
