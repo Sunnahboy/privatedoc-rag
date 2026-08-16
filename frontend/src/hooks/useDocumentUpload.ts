@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { apiClient, DocumentListItem } from "@/lib/api-client";
-import { UPLOAD_POLLING_INTERVAL_MS, ERROR_MESSAGES } from "@/lib/constants";
+import { UPLOAD_POLLING_INTERVAL_MS } from "@/lib/constants";
 export type UploadState = "idle" | "uploading" | "polling" | "success" | "error";
 
 export function useDocumentUpload(onSuccess?:()=>void) {

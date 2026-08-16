@@ -1,17 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiClient, DocumentListItem } from "@/lib/api-client";
 //manage fetching the document list.
-export function useDocuments() {
+interface UseDocumentsOptions {
+  autoFetch?: boolean;
+}
+
+export function useDocuments(options: UseDocumentsOptions = {}) {
+  const { autoFetch = true } = options;
   const [documents, setDocuments] = useState<DocumentListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(autoFetch);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchDocuments = useCallback(async () => {
     try {
       setIsLoading(true);
+      setError(null);
       const docs = await apiClient.listDocuments();
       setDocuments(docs);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to load documents", err);
+      setError(err instanceof Error ? err.message : "Unable to load documents.");
     } finally {
       setIsLoading(false);
     }
@@ -25,6 +33,7 @@ export function useDocuments() {
       await apiClient.deleteDocument(documentId);
     } catch (err) {
       console.error("Failed to delete document", err);
+      setError(err instanceof Error ? err.message : "Unable to delete document.");
       // Re-fetch to fix state if deletion failed
       fetchDocuments();
     }
@@ -32,11 +41,13 @@ export function useDocuments() {
 
   // Fetch on mount
   useEffect(() => {
-    // call async to avoid setting state synchronously in the effect body
-    (async () => {
-      await fetchDocuments();
-    })();
-  }, [fetchDocuments]);
+    if (autoFetch) {
+      // call async to avoid setting state synchronously in the effect body
+      (async () => {
+        await fetchDocuments();
+      })();
+    }
+  }, [autoFetch, fetchDocuments]);
 
-  return { documents, isLoading, fetchDocuments, deleteDocument };
+  return { documents, isLoading, error, fetchDocuments, deleteDocument };
 }
