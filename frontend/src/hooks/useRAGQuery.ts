@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { apiClient, RagResponse } from "@/lib/api-client";
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 export function useRAGQuery() {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -33,8 +37,7 @@ export function useRAGQuery() {
 
       } catch (err: unknown) {
         // If the request was aborted, don't treat as an error to show to the user
-        const isAbort = typeof err === 'object' && err !== null && (err as any).name === 'AbortError';
-        if (isAbort) {
+        if (isAbortError(err)) {
           // Keep error state untouched for aborts
           return null;
         }
