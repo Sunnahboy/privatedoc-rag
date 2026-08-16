@@ -284,7 +284,7 @@ export function RagChat({
       <div ref={conversationRef} className="flex-1 overflow-y-auto bg-[#faf9f6] p-4">
         <div className="space-y-4">
           {messages.length === 0 && !isLoading && (
-            <div className="flex h-full min-h-[10rem] items-center justify-center text-center text-sm text-on-surface-variant">
+            <div className="flex h-full min-h-40 items-center justify-center text-center text-sm text-on-surface-variant">
               Ask about this book to get grounded answers with citations.
             </div>
           )}
@@ -313,7 +313,7 @@ export function RagChat({
                           {canCollapse && !isExpandedMessage ? (
                             <div
                               aria-hidden="true"
-                              className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent"
+                              className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-white to-transparent"
                             />
                           ) : null}
                         </div>
@@ -398,7 +398,7 @@ export function RagChat({
                 }}
                 placeholder={editingMessageId ? "Edit your message and press Enter to update" : "Ask about this book..."}
                 aria-label="RAG Chat question input"
-                className="max-h-[180px] w-full resize-none rounded-md border border-outline-variant/30 bg-surface-container-low px-3 py-2 pr-12 text-sm leading-6 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="max-h-45 w-full resize-none rounded-md border border-outline-variant/30 bg-surface-container-low px-3 py-2 pr-12 text-sm leading-6 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
               <button
                 type="button"

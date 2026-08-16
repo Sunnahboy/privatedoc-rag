@@ -371,7 +371,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
       {!isFocusMode && (
         <header
           style={{ height: layout.headerHeight }}
-          className={`relative z-40 shrink-0 overflow-hidden border-b border-outline-variant/20 bg-[#F7F5EF] transition-[height] duration-200 ${resizeTarget === "header" ? "!transition-none select-none" : ""}`}
+          className={`relative z-40 shrink-0 overflow-hidden border-b border-outline-variant/20 bg-[#F7F5EF] transition-[height] duration-200 ${resizeTarget === "header" ? "transition-none! select-none" : ""}`}
         >
           <div className="flex h-full items-center justify-between gap-3 px-4 md:px-6">
           <div className="min-w-0">
@@ -461,7 +461,9 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
         {!isFocusMode && (
           <aside
             style={{ "--toc-width": `${layout.tocWidth}px`, "--reader-header-height": `${layout.headerHeight}px` } as CSSProperties}
-            className={`fixed bottom-0 left-0 top-[var(--reader-header-height)] z-30 w-80 min-w-0 overflow-y-auto border-r border-outline-variant/20 bg-[#F7F5EF] transition-all duration-300 md:relative md:top-auto md:z-0 ${effectiveTocOpen ? "md:w-[var(--toc-width)] md:border-r" : "md:w-0 md:border-r-0"} ${resizeTarget === "toc" ? "md:!transition-none md:select-none" : ""} ${tocPanelClass}`}
+            className={`fixed bottom-0 left-0 top-var(--reader-header-height) z-30 w-80 min-w-0 overflow-y-auto border-r border-outline-variant/20
+               bg-[#F7F5EF] transition-all duration-300 md:relative md:top-auto md:z-0 ${effectiveTocOpen ? "md:w-(--toc-width) md:border-r" : "md:w-0 md:border-r-0"} 
+               ${resizeTarget === "toc" ? "md:transition-none! md:select-none" : ""} ${tocPanelClass}`}
           >
           <div className="p-4">
             <div className="mb-4">
@@ -556,7 +558,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
         {!isFocusMode && (
           <aside
             style={{ "--chat-width": `${isRagExpanded ? CHAT_WIDTH.max : layout.chatWidth}px`, "--reader-header-height": `${layout.headerHeight}px` } as CSSProperties}
-            className={`fixed bottom-0 right-0 top-[var(--reader-header-height)] z-30 w-96 min-w-0 overflow-hidden border-l border-outline-variant/20 bg-white transition-all duration-300 xl:relative xl:top-auto xl:z-0 ${effectiveAiOpen ? "xl:w-[var(--chat-width)] xl:border-l" : "xl:w-0 xl:border-l-0"} ${resizeTarget === "chat" ? "xl:!transition-none xl:select-none" : ""} ${aiPanelClass}`}
+            className={`fixed bottom-0 right-0 top-var(--reader-header-height) z-30 w-96 min-w-0 overflow-hidden border-l border-outline-variant/20 bg-white transition-all duration-300 xl:relative xl:top-auto xl:z-0 ${effectiveAiOpen ? "xl:w-(--chat-width) xl:border-l" : "xl:w-0 xl:border-l-0"} ${resizeTarget === "chat" ? "xl:transition-none! xl:select-none" : ""} ${aiPanelClass}`}
           >
             {effectiveAiOpen && (
               <button type="button" aria-label="Resize RAG Chat" title="Resize RAG Chat" onPointerDown={(event) => startResize("chat", event)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onKeyDown={(event) => resizeWithKeyboard("chat", event)} className="reader-resize-handle reader-resize-handle-col absolute inset-y-0 left-0 z-40 hidden w-3 cursor-col-resize touch-none xl:block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"><span aria-hidden="true" /></button>
