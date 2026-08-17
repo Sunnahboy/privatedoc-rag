@@ -6,7 +6,7 @@ class Chunk:
     """
     One searchable piece of a document
 
-    This object eventually become:
+    :
      -PostgreSQL row
      -Qdrant vector
      -Citation source
