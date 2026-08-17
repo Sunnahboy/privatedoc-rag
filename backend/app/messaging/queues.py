@@ -12,10 +12,10 @@ async def setup_queues_and_bindings(
 
     exchanges = await declare_exchanges(channel)
 
-    # 1 . Declare Dead Letter Queues(DLQ) concurrently
+    # Declare Dead Letter Queues(DLQ) concurrently
     dlq = channel.declare_queue(name=settings.DLQ_NAME, durable=True)
 
-    # 2 Declare main processing Queues with DLX arguments
+    # Declare main processing Queues with DLX arguments
     queue_args = {
         "x-dead-letter-exchange": settings.DLX_EXCHANGE_NAME,
         "x-dead-letter-routing-key": settings.DLQ_ROUTING_KEY,
