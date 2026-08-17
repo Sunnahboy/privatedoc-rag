@@ -36,32 +36,11 @@ async def upload_document(
     file: Annotated[UploadFile, File(...)], db: Annotated[AsyncSession, Depends(get_db)]
 ) -> DocumentUploadResponse:
     """
-    Upload a document.
+    Upload a document and return its metadata.
 
-    What this endpoint does now:
-    - Receives file upload.
-    - Validates filename, extension, and size.
-    - Saves(sqlite) file safely using async chunked file I/O.
-    - Returns document metadata.
-
-    What this endpoint does NOT do yet:
-    - PDF extraction.
-    - Chunking.
-    - Embedding.
-    - Qdrant storage.
-    - RAG answering.
-
-    Why:
-    - Uploading is I/O bound.
-    - Async upload handling improves concurrency.
-     -Chunked saving avoids loading large files into memory.
-
-     Later behavior:
-     -Trigger indexing.
-     -Extract text.
-     -Chunk content.
-     -Generate embeddings.
-     -Store vectors in Qdrant.
+    Validates and saves the file using async chunked I/O.
+    The document is then queued for asynchronous ingestion,
+    which handles extraction, cleaning, chunking, embedding, and indexing.
     """
 
     try:
@@ -76,7 +55,7 @@ async def upload_document(
 
         return result
     except HTTPException:
-        raise  # silently swallow the error
+        raise
     except DuplicateDocumentError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -84,7 +63,7 @@ async def upload_document(
         )
     except Exception as exc:
         logger.exception(
-            "unexpected document upload failure for filename: %s",
+            "unexpected document upload failure for filename: %s", file.filename,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

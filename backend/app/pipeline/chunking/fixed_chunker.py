@@ -34,8 +34,8 @@ class FixedChunker(BaseChunker):
             chunks.append(
                 Chunk(
                     chunk_id=str(uuid.uuid4()),
-                    document_id="",  # Assigned later by IngestionPipeline
-                    chunk_index=index,  # current loop index
+                    document_id="",  
+                    chunk_index=index,  
                     text=text[start:end],
                     start_char=start,
                     end_char=end,

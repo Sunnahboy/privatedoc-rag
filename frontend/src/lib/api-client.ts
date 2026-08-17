@@ -49,7 +49,7 @@ export const  apiClient ={
     },
     /**
      * Fetches the current processing status of a document.
-     * We will poll this endpoint while the RabbitMQ worker processes the file.
+     *  polls this endpoint while the RabbitMQ worker processes the file.
      */
     async getDocument(documentId: string): Promise<DocumentListItem>{
         const response = await fetch(`${API_BASE_URL}/document/${documentId}`);

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 def utc_now() -> datetime:
     """
     Return timezone aware utc datetime.
-     Why:
+     as:
     - Server timezones vary.
     - UTC timestamps are easier to compare and debug.
     """

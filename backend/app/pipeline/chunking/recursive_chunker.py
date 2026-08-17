@@ -104,9 +104,9 @@ class RecursiveChunker(BaseChunker):
 
         return all_chunks
 
-    # ------------------------------------------------------------------
+    
     # Core recursive splitting
-    # ------------------------------------------------------------------
+    
 
     def _split_span(
         self,
@@ -263,9 +263,9 @@ class RecursiveChunker(BaseChunker):
 
         return previous_emitted
 
-    # ------------------------------------------------------------------
+   
     # Hard split fallback
-    # ------------------------------------------------------------------
+   
 
     def _hard_split(
         self,
@@ -308,9 +308,9 @@ class RecursiveChunker(BaseChunker):
 
         return last_emitted
 
-    # ------------------------------------------------------------------
+  
     # Chunk emission
-    # ------------------------------------------------------------------
+   
 
     def _emit_chunk(
         self,
@@ -344,9 +344,9 @@ class RecursiveChunker(BaseChunker):
         )
         return _Span(start, end)
 
-    # ------------------------------------------------------------------
+   
     # Separator scanning
-    # ------------------------------------------------------------------
+    
 
     def _iter_parts(
         self,
@@ -382,9 +382,9 @@ class RecursiveChunker(BaseChunker):
             yield _Span(cursor, next_cursor)
             cursor = next_cursor
 
-    # ------------------------------------------------------------------
+    
     # Overlap / boundary helpers
-    # ------------------------------------------------------------------
+  
 
     def _active_prefix(
         self,
@@ -436,9 +436,9 @@ class RecursiveChunker(BaseChunker):
 
         return start
 
-    # ------------------------------------------------------------------
+   
     # Input normalization / validation
-    # ------------------------------------------------------------------
+  
 
     @staticmethod
     def _content_bounds(text: str) -> tuple[int, int]:

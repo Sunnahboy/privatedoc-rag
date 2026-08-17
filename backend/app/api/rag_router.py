@@ -24,6 +24,8 @@ async def ask(
     pipeline: Annotated[get_pipeline, Depends(get_pipeline)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    """The API doorway to  RAG pipeline it validates the request,
+    calls the pipeline, and formats the result for the frontend."""
 
     if request.document_id:
         document = await document_service.get_document_by_id(
