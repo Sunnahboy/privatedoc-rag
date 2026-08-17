@@ -9,8 +9,6 @@ router = APIRouter(prefix="/health", tags=["Health"])
 def health_check() -> dict:
     """
     Simple health check endpoint.
-
-    Why this matters:
     - Confirms the backend server is alive.
     - Later, Docker and deployment tools can use this to check service status.
     """
