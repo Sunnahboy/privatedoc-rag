@@ -148,7 +148,7 @@ export default function ReaderToolbar({
                 <summary className="inline-flex h-9 cursor-pointer list-none items-center rounded-md border border-outline-variant/30 bg-white px-3 text-sm text-on-surface transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
                   More controls
                 </summary>
-                <div className="absolute right-0 z-20 mt-2 flex min-w-[220px] flex-col gap-1 rounded-md border border-outline-variant/30 bg-white p-2 shadow-sm">
+                <div className="absolute right-0 z-20 mt-2 flex min-w-55 flex-col gap-1 rounded-md border border-outline-variant/30 bg-white p-2 shadow-sm">
                   <button type="button" onClick={() => onViewModeChange("single")} className="rounded px-2 py-1 text-left text-sm hover:bg-surface">Single</button>
                   <button type="button" onClick={() => onViewModeChange("double")} className="rounded px-2 py-1 text-left text-sm hover:bg-surface">Spread</button>
                   <button type="button" onClick={() => onViewModeChange("scroll")} className="rounded px-2 py-1 text-left text-sm hover:bg-surface">Scroll</button>
