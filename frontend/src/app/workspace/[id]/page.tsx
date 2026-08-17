@@ -418,7 +418,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
             />
             <PanelButton
               label={isAiOpen ? "Hide RAG Chat" : "Show RAG Chat"}
-              icon="auto_awesome"
+              icon="storage"
               active={effectiveAiOpen}
               onClick={() => setIsAiOpen((current) => !current)}
             />
