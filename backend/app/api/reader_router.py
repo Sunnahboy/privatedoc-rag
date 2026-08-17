@@ -17,7 +17,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 @router.get("/{document_id}")
 async def get_document_metadata(document_id: str, db: DbSession):
     """
-    Fetches the document metadata for the Next.js reader UI.
+    Fetches the document metadata for the frontend reader UI.
     This includes the filename, chunk counts, and the Table of Contents (TOC).
     """
     result = await db.execute(select(Document).where(Document.id == document_id))
@@ -31,7 +31,7 @@ async def get_document_metadata(document_id: str, db: DbSession):
 @router.get("/{document_id}/file")
 async def get_document_file(document_id: str, db: DbSession):
     """
-    Serves the raw PDF file bytes for the Next.js PDFViewer.
+    Serves the raw PDF file bytes for the frontend PDFViewer.
     """
     result = await db.execute(select(Document).where(Document.id == document_id))
     doc = result.scalars().first()
@@ -50,6 +50,6 @@ async def get_document_file(document_id: str, db: DbSession):
         path=file_path,
         media_type="application/pdf",
         filename=doc.original_filename,
-        # Required for Next.js react-pdf to read 
+        # Required for frontend react-pdf to read 
         headers={"Access-Control-Expose-Headers": "Accept-Ranges, Content-Length"},
     )
