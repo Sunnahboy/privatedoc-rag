@@ -145,9 +145,9 @@ class RabbitMQManager:
 
     async def create_consumer_channel(self) -> AbstractRobustChannel:
         """
-        Create and return a dedicated, unpooled channel for long-running consumers.
+        Create and return a dedicated, unpolled channel for long-running consumers.
 
-        Why:
+        as:
         - Consumers must hold channels open indefinitely to listen to queues.
         - By creating a standalone channel directly from the connection, we prevent
           consumers from starving the publisher channel pool.
