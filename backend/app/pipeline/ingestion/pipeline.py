@@ -192,6 +192,7 @@ class IngestionPipeline(BaseIngestionPipeline):
         if visual_jobs:
             pool = rabbitmq_manager.get_channel_pool()
             async with pool.acquire() as channel:
+                await channel.declare_queue("document.visual.queue", durable=True)
                 for job in visual_jobs:
                     await channel.default_exchange.publish(
                         aio_pika.Message(
