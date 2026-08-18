@@ -31,6 +31,8 @@ dependencies = [
     "aio-pika>=10.0.1",
     "asyncpg>=0.31.0",
     "tenacity>=9.1.4",
+    "tokenizers<=0.23.0",
+    "colpali-engine>=0.3.0",
 ]
 [tool.setuptools.packages.find]
 exclude = ["alembic*"]
