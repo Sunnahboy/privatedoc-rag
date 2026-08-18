@@ -1,13 +1,13 @@
-
 import logging
 
-from config import settings
 from qdrant_client import AsyncQdrantClient, models
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 # Initialize a global client to be imported by  workers and indexers
-qdrant_client = AsyncQdrantClient(url=settings.QDRANT_URL)
+qdrant_client = AsyncQdrantClient(url=settings.qdrant_url)
 
 
 async def setup_qdrant_collections() -> None:
