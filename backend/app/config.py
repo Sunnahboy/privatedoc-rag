@@ -87,6 +87,18 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    allowed_origins_str: str = "http://localhost:3100"
+
+    @computed_field
+    @property
+    def allowed_origins(self) -> list[str]:
+        """Convert comma-separated origins string into a Python list."""
+        return [
+            origin.strip()
+            for origin in self.allowed_origins_str.split(",")
+            if origin.strip()
+        ]
+
     @computed_field
     @property
     def allowed_extensions_set(self) -> set[str]:
