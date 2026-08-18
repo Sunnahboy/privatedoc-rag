@@ -4,6 +4,8 @@ from app.pipeline.generation.ollama_generator import OllamaGenerator
 from app.pipeline.retrieval.bm25_retriever import BM25Retriever
 from app.pipeline.retrieval.hybrid_retriever import HybridRetriever
 from app.pipeline.retrieval.interface import BaseRetriever
+from app.pipeline.retrieval.models import RetrievalResult
+from app.pipeline.retrieval.multimodal_pipeline import MultimodalRetrievalPipeline
 from app.pipeline.retrieval.qdrant_retriever import QdrantRetriever
 from app.utils.logging_utils import log_rag_profile
 from app.utils.profiler import get_timings, profile, reset_profiler
@@ -18,6 +20,7 @@ class RAGPipeline(BaseRAGPipeline):
         self,
         retriever: BaseRetriever | None = None,
         generator: BaseGenerator | None = None,
+        multimodal_pipeline: MultimodalRetrievalPipeline | None = None,
     ):
         if retriever is None:
             retriever = HybridRetriever(
@@ -27,6 +30,7 @@ class RAGPipeline(BaseRAGPipeline):
 
         self.retriever = retriever
         self.generator = generator or OllamaGenerator()
+        self.multimodal_pipeline = multimodal_pipeline
 
     async def ask(
         self,
@@ -34,11 +38,24 @@ class RAGPipeline(BaseRAGPipeline):
         document_id: str | None = None,
     ) -> GenerateResult:
         reset_profiler()
+
         with profile("Retrieval"):
-            retrieved = await self.retriever.retrieve(
-                query=question,
-                document_id=document_id,
-            )
+            if self.multimodal_pipeline and document_id:
+                multimodal_result = await self.multimodal_pipeline.search(
+                    query=question,
+                    document_id=document_id,
+                )
+                retrieved = RetrievalResult(
+                    chunks=multimodal_result.fused_chunks,
+                    found=bool(multimodal_result.fused_chunks),
+                    dense_hits=len(multimodal_result.text_chunks),
+                    fused_hits=len(multimodal_result.fused_chunks),
+                )
+            else:
+                retrieved = await self.retriever.retrieve(
+                    query=question,
+                    document_id=document_id,
+                )
         if not retrieved.found:
             return GenerateResult(
                 answer="I couldn't find any relevant information in the selected document.",
@@ -68,3 +85,5 @@ class RAGPipeline(BaseRAGPipeline):
     async def close(self):
         await self.retriever.close()
         await self.generator.close()
+        if self.multimodal_pipeline and hasattr(self.multimodal_pipeline, "close"):
+            await self.multimodal_pipeline.close()
