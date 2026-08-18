@@ -34,6 +34,9 @@ class IngestionLogger:
             total,
             throughput,
         )
+    @staticmethod
+    def info(message: str, *args) -> None:
+        logger.info(message, *args)
 
     @staticmethod
     def error(document_id: str) -> None:
