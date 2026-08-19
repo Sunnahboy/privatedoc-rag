@@ -20,7 +20,7 @@ class MultimodalRetriever:
         self.text_embedder = text_embedder
         self.visual_engine = visual_engine
 
-        self.text_collection = "documents_text"
+        self.text_collection = "documents"
         self.visual_collection = "documents_visual"
 
     async def retrieve(
@@ -33,7 +33,7 @@ class MultimodalRetriever:
         logger.info(f"Executing multimodal retrieval for query: '{query}'")
 
         # 1. Generate Embeddings (CPU/GPU bound, run in threads to avoid blocking)
-        text_vector_task = asyncio.to_thread(self.text_embedder.embed_query, query)
+        text_vector_task = self.text_embedder.embed_query(query)
         visual_vector_task = asyncio.to_thread(self.visual_engine.embed_query, query)
 
         text_vector, visual_vector = await asyncio.gather(
@@ -50,24 +50,27 @@ class MultimodalRetriever:
         )
 
         # 3. Execute Qdrant Searches Concurrently
-        text_search_task = self.client.search(
+        text_search_task = self.client.query_points(
             collection_name=self.text_collection,
-            query_vector=text_vector,
+            query=text_vector,
             query_filter=doc_filter,
             limit=limit,
         )
 
-        visual_search_task = self.client.search(
+        visual_search_task = self.client.query_points(
             collection_name=self.visual_collection,
-            # CRITICAL: We must format the ColPali query as a MultiVector
-            query_vector=models.MultiVectorQuery(multi_vector=visual_vector.tolist()),
+            # ColPali produces a multi-vector; pass as List[List[float]]
+            query=models.NearestQuery(nearest=visual_vector.tolist()),
             query_filter=doc_filter,
             limit=limit,
         )
-
-        text_results, visual_results = await asyncio.gather(
+        # Await both searches
+        text_response, visual_response = await asyncio.gather(
             text_search_task, visual_search_task
         )
+        # Extract the list of points from the response objects
+        text_results = text_response.points
+        visual_results = visual_response.points
 
         # 4. Format and Return Results
         formatted_results = {
