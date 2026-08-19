@@ -14,6 +14,7 @@ from app.api.reader_router import router as reader_router
 from app.config import settings
 from app.messaging.connection import rabbitmq_manager
 from app.pipeline.ocr import RapidOCREngine
+from app.qdrant import setup_qdrant_collections
 from app.utils.logging_utils import configure_logging
 
 configure_logging()
@@ -60,7 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await asyncio.to_thread(_warmup_ocr)
     # 2. Database initialization
     logger.info("Database initialized")
-
+    await setup_qdrant_collections()  # check if 'documents_visual' exists,
     # Initialize RabbitMQ Manager so the channel pool is ready for publishers
     await rabbitmq_manager.initialize()
 
@@ -86,11 +87,7 @@ app = FastAPI(
 app.add_middleware(
     # later change to i.e "http://localhost:xx",
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://192.168.150.135:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -12,6 +12,8 @@ class BaseRetriever(ABC):
         query: str,
         top_k: int | None = None,
         document_id: str | None = None,
+        limit: int = 5,  
+        **kwargs,
     ) -> RetrievalResult:
         """
         Retrieve relevant chunks.

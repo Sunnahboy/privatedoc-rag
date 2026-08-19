@@ -46,6 +46,8 @@ class HybridRetriever(BaseRetriever):
         query: str,
         top_k: int | None = None,
         document_id: str | None = None,
+        limit: int = 5,  
+        **kwargs
     ) -> RetrievalResult:
         if not query or not query.strip():
             raise RetrievalError("Query cannot be empty")
