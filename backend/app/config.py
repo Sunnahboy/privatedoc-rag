@@ -66,8 +66,10 @@ class Settings(BaseSettings):
     embedding_max_concurrency: int = 1
     embedding_batch_size: int = 16
 
-    generation_model: str = "llama3.1:8b"
-    # generation_model: str = "qwen3:4b "
+    #generation_model: str = "llama3.1:8b"
+    #generation_model: str ="llama3.2"
+    generation_model: str = "gemma3:4b"
+    visual_model:str = "gemma3:4b" 
     generation_timeout: int = 60
 
     qdrant_max_concurrent_requests: int = 8
