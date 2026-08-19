@@ -98,7 +98,7 @@ async def process_visual_job(message: aio_pika.IncomingMessage) -> None:
 
             point_id = f"{payload.document_id}_page_{payload.page_number}"
 
-            await qdrant_client.upsert(
+            await qdrant_client.upsert_points(
                 collection_name="documents_visual",
                 points=[
                     models.PointStruct(
