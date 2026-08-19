@@ -59,6 +59,7 @@ class MultimodalRetrievalPipeline:
                 text=item["text"],
                 page_number=item["page_number"],
                 score=item["score"],
+                chunk_index=idx,
             )
             for idx, item in enumerate(raw_results["text_chunks"])
         ]
@@ -82,9 +83,10 @@ class MultimodalRetrievalPipeline:
             RetrievedChunk(
                 chunk_id=f"{document_id}_visual_page_{vp['page_number']}",
                 document_id=document_id,
+                chunk_index=vp['page_number'],
                 text=f"[Visual Asset: Page {vp['page_number']} - Reasons: {vp.get('reasons', [])}]",
-                page_number=vp["page_number"],
-                score=vp["score"],
+                page_number=vp['page_number'],
+                score=vp['score'],
             )
             for vp in valid_visual_pages
         ]
