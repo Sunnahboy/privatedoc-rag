@@ -11,7 +11,7 @@ qdrant_client = AsyncQdrantClient(url=settings.qdrant_url)
 
 
 async def setup_qdrant_collections() -> None:
-    """Creates the necessary collections if they do not exist."""
+    """Creates both the text and visual collections if they do not exist."""
     collection_name = "documents_visual"
 
     try:
