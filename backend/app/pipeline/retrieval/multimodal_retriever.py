@@ -32,7 +32,7 @@ class MultimodalRetriever:
         """
         logger.info(f"Executing multimodal retrieval for query: '{query}'")
 
-        # 1. Generate Embeddings (CPU/GPU bound, run in threads to avoid blocking)
+        # Generate Embeddings (CPU/GPU bound, run in threads to avoid blocking)
         text_vector_task = self.text_embedder.embed_query(query)
         visual_vector_task = asyncio.to_thread(self.visual_engine.embed_query, query)
 
@@ -40,7 +40,7 @@ class MultimodalRetriever:
             text_vector_task, visual_vector_task
         )
 
-        # 2. Setup the Document Filter
+        # Setup the Document Filter
         doc_filter = models.Filter(
             must=[
                 models.FieldCondition(
@@ -49,7 +49,7 @@ class MultimodalRetriever:
             ]
         )
 
-        # 3. Execute Qdrant Searches Concurrently
+        #  Execute Qdrant Searches Concurrently
         text_search_task = self.client.query_points(
             collection_name=self.text_collection,
             query=text_vector,
@@ -72,7 +72,7 @@ class MultimodalRetriever:
         text_results = text_response.points
         visual_results = visual_response.points
 
-        # 4. Format and Return Results
+        #  Format and Return Results
         formatted_results = {
             "text_chunks": [
                 {

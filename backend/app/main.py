@@ -2,7 +2,7 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-
+from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
 import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,8 +57,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # - Verify Qdrant connection
     # - Verify Ollama connection
 
-    # 1. Warm up the OCR engine in a separate thread
+    # 1. Warm up the OCR and visual  engine in a separate thread
     await asyncio.to_thread(_warmup_ocr)
+    app.state.visual_engine = VisualRetrieverEngine()
     # 2. Database initialization
     logger.info("Database initialized")
     await setup_qdrant_collections()  # check if 'documents_visual' exists,

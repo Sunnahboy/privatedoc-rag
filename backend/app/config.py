@@ -60,8 +60,8 @@ class Settings(BaseSettings):
 
     ollama_url: str = "http://localhost:11434"
     embedding_provider: str = "ollama"
-    embedding_model: str = "nomic-embed-text"
-    embedding_dimensions: int = 768
+    embedding_model: str = "qwen3-embedding:0.6b"
+    embedding_dimensions: int = 1024
     embedding_timeout: int = 120
     embedding_max_concurrency: int = 1
     embedding_batch_size: int = 16
