@@ -31,7 +31,7 @@ from app.utils.logging_utils import configure_logging
 configure_logging()
 logger = logging.getLogger("visual_worker")
 
-# Declare globals as None initially (no heavy loading on import!)
+# no heavy loading on import
 visual_engine = None
 qdrant_client = None
 
@@ -88,12 +88,12 @@ async def process_visual_job(message: aio_pika.IncomingMessage) -> None:
                 logger.error(f"File not found at resolved path: {file_path}. Dropping job.")
                 return
 
-            # 1. Render the physical page to an image
+            # Render the physical page to an image
             image = await asyncio.to_thread(
                 render_pdf_page_to_image, file_path, payload.page_number
             )
 
-            # 2. Generate Late-Interaction Multi-Vectors
+            # Generate Late-Interaction Multi-Vectors
             multi_vector = await asyncio.to_thread(visual_engine.embed_image, image)
 
             point_id = f"{payload.document_id}_page_{payload.page_number}"
