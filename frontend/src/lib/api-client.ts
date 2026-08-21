@@ -1,5 +1,25 @@
 import { API_BASE_URL } from "./constants";
 
+export type DocumentStatus = "indexed" | "processing" | "failed";
+
+export function normalizeDocumentStatus(status?: string | null): DocumentStatus {
+    const normalized = status?.toString().trim().toLowerCase();
+
+    if (!normalized) {
+        return "processing";
+    }
+
+    if (normalized === "indexed" || normalized === "completed") {
+        return "indexed";
+    }
+
+    if (normalized === "failed") {
+        return "failed";
+    }
+
+    return "processing";
+}
+
 // ... rest of the file stays the same
 export interface DocumentUploadResponse{
     document_id: string;
