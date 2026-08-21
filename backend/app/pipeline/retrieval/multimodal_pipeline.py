@@ -20,7 +20,9 @@ class UnifiedRetrievalResult:
         RetrievedChunk
     ]  # Fused chunks (both text and pseudo-visual chunks)
     fused_page_ranks: list[tuple[int, float]]
-    has_strong_visual_match: bool  # Flag for the generator
+    has_strong_visual_match: bool  
+    dense_hits: int = 0   
+    sparse_hits: int = 0  
 
 
 class MultimodalRetrievalPipeline:
@@ -40,9 +42,9 @@ class MultimodalRetrievalPipeline:
         self,
         query: str,
         document_id: str,
-        text_top_k: int = 15,
-        visual_top_k: int = 3,
-        final_top_k: int = 5,
+        text_top_k: int = 20,
+        visual_top_k: int = 10,
+        final_top_k: int = 8,
     ) -> UnifiedRetrievalResult:
         # 1. Parallel search in Qdrant
         raw_results = await self.retriever.retrieve(
@@ -114,4 +116,6 @@ class MultimodalRetrievalPipeline:
             fused_chunks=fused_chunks,
             fused_page_ranks=sorted_pages,
             has_strong_visual_match=has_strong_visual_match,
+            dense_hits=raw_results.get("dense_hits", 0),  
+            sparse_hits=raw_results.get("sparse_hits", 0), 
         )
