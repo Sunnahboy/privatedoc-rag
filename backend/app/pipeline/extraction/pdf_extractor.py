@@ -1,261 +1,125 @@
-import asyncio
+# app/pipeline/extraction/pdf_extractor.py
 import logging
-import os
-import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-
-import fitz
-import numpy as np
-from app.config import settings
-from app.pipeline.ocr import BaseOCR, RapidOCREngine
-
+from threading import Lock
+import tempfile
+import asyncio
+import fitz  # PyMuPDF
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.datamodel.pipeline_options import PdfPipelineOptions, AcceleratorOptions,TableFormerMode
+from docling.datamodel.base_models import InputFormat
+from docling.document_converter import DocumentConverter
 from .base import BaseExtractor
 from .models import ExtractionResult
 
 logger = logging.getLogger(__name__)
 
-_MIN_DIGITAL_TEXT_WORDS = settings.min_digital_text_words
-_OCR_DPI = int(os.environ.get("PDF_OCR_DPI", settings.pdf_ocr_dpi))
-
-
-def _chunk_ranges(total: int, num_chunks: int) -> list[range]:
-    if total == 0 or num_chunks == 0:
-        return []
-    base, remainder = divmod(total, num_chunks)
-    ranges, start = [], 0
-    for i in range(num_chunks):
-        size = base + (1 if i < remainder else 0)
-        if size == 0:
-            continue
-        ranges.append(range(start, start + size))
-        start += size
-    return ranges
-
-
 class PDFExtractor(BaseExtractor):
-    """
-    PDF extraction strategy using native text with an injected OCR fallback.
-    """
+    # Class-level variables to hold Docling in memory
+    _converter_instance = None
+    _converter_lock = Lock()
+    def __init__(self, **kwargs):
+        self._initialize_converter()
+        self.converter = self.__class__._converter_instance
+    @classmethod
+    def _initialize_converter(cls):
+        # If it's already loaded, exit immediately
+        if cls._converter_instance is not None:
+            return
 
-    def __init__(self, ocr_engine: BaseOCR | None = None):
-        """
-        Initialize the PDF Extractor.
+        with cls._converter_lock:
+            # Double-check inside the lock
+            if cls._converter_instance is not None:
+                return
 
-        Args:
-            ocr_engine: An instance of BaseOCR. Defaults to RapidOCREngine if None.
-        """
-        self.ocr = ocr_engine or RapidOCREngine()
+            logger.info("Initializing Docling DocumentConverter (CPU Mode) for the first time...")
+            
+            pipeline_options = PdfPipelineOptions()
+            pipeline_options.do_ocr = False 
+            pipeline_options.do_table_structure = True
+            pipeline_options.table_structure_options.mode = TableFormerMode.FAST
+            pipeline_options.do_code_enrichment = False
+            pipeline_options.do_formula_enrichment = False
+            pipeline_options.do_picture_classification = False
+            pipeline_options.do_picture_description = False
+            
+            pipeline_options.accelerator_options = AcceleratorOptions(
+                num_threads=4, 
+                device="cpu"  
+            )
+            
+            # Apply options to the converter and cache it at the class level
+            cls._converter_instance = DocumentConverter(
+                allowed_formats=[InputFormat.PDF],
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+                }
+            )
+            logger.info("Docling loaded successfully!")
 
     async def extract(self, file_path: Path) -> ExtractionResult:
         if not file_path.exists():
             raise FileNotFoundError(file_path)
 
-        return await asyncio.to_thread(
-            self._sync_extract,
-            file_path,
-        )
+        # Run extraction using a temporary sanitized clone
+        return await asyncio.to_thread(self._extract_with_sanitized_clone, file_path)
 
-    def _sync_extract(self, file_path: Path) -> ExtractionResult:
+    def _extract_with_sanitized_clone(self, file_path: Path) -> ExtractionResult:
+        logger.info(f"[Docling] Processing extraction for: {file_path.name}")
+
+        temp_path: Path | None = None
+        source_doc = None
+
         try:
-            file_bytes = file_path.read_bytes()
+            with tempfile.NamedTemporaryFile(
+                prefix=f"clean_{file_path.stem}_",
+                suffix=".pdf",
+                delete=False,
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
 
-            with fitz.open(stream=file_bytes, filetype="pdf") as document:
-                total_pages = document.page_count
-                metadata = dict(document.metadata)
-
-                # EXTRACT AND FORMAT THE TOC
-                raw_toc = document.get_toc()
-                formatted_toc = [
-                    {"level": item[0], "title": item[1], "page_number": item[2]}
-                    for item in raw_toc
-                ]
-
-            print(f"[PDF] {file_path.name}: {total_pages} page(s) detected.")
-
-            if total_pages == 0:
-                return ExtractionResult(
-                    pages=[],
-                    total_pages=0,
-                    toc=formatted_toc,
-                    metadata=metadata,
-                )
-
-            max_workers = min(total_pages, settings.pdf_ocr_max_concurrent)
-            page_ranges = _chunk_ranges(total_pages, max_workers)
-
-            print(
-                f"[PDF] Using {len(page_ranges)} worker(s) for {total_pages} page(s): "
-                + ", ".join(
-                    f"worker {i} -> pages {r.start + 1}-{r.stop}"
-                    for i, r in enumerate(page_ranges)
-                )
+            source_doc = fitz.open(file_path)
+            actual_total_pages = len(source_doc)
+            logger.info(
+                f"[Docling] Found {actual_total_pages} pages in {file_path.name}. Sanitizing annotations..."
             )
 
-            overall_start = time.perf_counter()
+            for page in source_doc:
+                annot = page.first_annot
+                while annot:
+                    next_annot = annot.next
+                    annot_type = getattr(annot, "type", None)
+                    if isinstance(annot_type, (tuple, list)):
+                        annot_type = annot_type[0]
 
-            with ThreadPoolExecutor(
-                max_workers=len(page_ranges),
-                thread_name_prefix="pdf_page_worker",
-            ) as executor:
-                futures = [
-                    executor.submit(
-                        self._process_page_range,
-                        file_bytes,
-                        page_range,
-                        worker_id,
-                    )
-                    for worker_id, page_range in enumerate(page_ranges)
-                ]
+                    if annot_type in {8, 9, 10, 11}:
+                        page.delete_annot(annot)
+                    annot = next_annot
 
-                chunk_results = [future.result() for future in futures]
+            source_doc.save(temp_path, garbage=3, deflate=True)
 
-            pages = [text for chunk in chunk_results for text in chunk]
+            logger.info(
+                f"[Docling] Handing {actual_total_pages} pages over to CPU Layout Models."
+            )
+            logger.info(
+                f"[Docling] NOTE: Docling processes the file as a batch. It will remain silent until all {actual_total_pages} pages are done..."
+            )
 
-            print(
-                f"[PDF] {file_path.name}: extraction finished in "
-                f"{time.perf_counter() - overall_start:.2f}s "
-                f"({sum(1 for p in pages if p)}/{total_pages} pages produced text)."
+            result = self.converter.convert(str(temp_path))
+            markdown_content = result.document.export_to_markdown()
+            logger.info(
+                f"[Docling] Success! Extracted {len(markdown_content)} characters of markdown."
             )
 
             return ExtractionResult(
-                pages=pages,
-                total_pages=total_pages,
-                toc=formatted_toc,
-                metadata=metadata,
+                pages=[markdown_content],
+                total_pages=actual_total_pages,
+                toc=[],
+                metadata={},
             )
+        finally:
+            if source_doc is not None:
+                source_doc.close()
 
-        except fitz.FileDataError as exc:
-            raise RuntimeError(f"Invalid PDF: {file_path}") from exc
-
-    def _process_page_range(
-        self,
-        file_bytes: bytes,
-        page_range: range,
-        worker_id: int = 0,
-    ) -> list[str]:
-        results: list[str] = []
-        print(
-            f"[worker {worker_id}] opening PDF for pages "
-            f"{page_range.start + 1}-{page_range.stop}"
-        )
-
-        try:
-            with fitz.open(stream=file_bytes, filetype="pdf") as document:
-                for page_number in page_range:
-                    page_start = time.perf_counter()
-
-                    # Catch errors PER PAGE so one bad page doesn't kill the whole worker chunk
-                    try:
-                        text = self._process_single_page(
-                            document, page_number, worker_id
-                        )
-                        results.append(text)
-                        print(
-                            f"[worker {worker_id}] page {page_number + 1} done "
-                            f"in {time.perf_counter() - page_start:.2f}s "
-                            f"({len(text)} chars)"
-                        )
-                    except Exception:
-                        logger.exception("Failed processing page %d", page_number + 1)
-                        print(
-                            f"[worker {worker_id}] FAILED processing page {page_number + 1}"
-                        )
-                        results.append("")
-
-        except Exception:
-            logger.exception("Worker %d failed to open document", worker_id)
-            results.extend(
-                "" for _ in range(page_range.stop - page_range.start - len(results))
-            )
-
-        print(f"[worker {worker_id}] finished range, {len(results)} page(s) processed")
-
-        return results
-
-    def _process_single_page(
-        self,
-        document: fitz.Document,
-        page_number: int,
-        worker_id: int = 0,
-    ) -> str:
-        """Extract one page using native text with OCR fallback."""
-        try:
-            page = document.load_page(page_number)
-            text = page.get_text().strip()
-
-            if not self._should_run_ocr(page, text):
-                return text
-
-            image_np = self._page_to_numpy(page)
-
-            # Fast Path: Skip blank/pure white pages even if we generated an image
-            if image_np.size == 0 or np.mean(image_np) > 252:
-                return text
-
-            # Inject the image into the abstracted OCR module
-            ocr_text = self.ocr.extract(image_np)
-
-            return ocr_text or text
-
-        except Exception:
-            logger.exception("Failed processing page %d", page_number + 1)
-            return ""
-
-    def _should_run_ocr(self, page: fitz.Page, current_text: str) -> bool:
-        """
-        Determine if OCR is necessary based on existing text and image coverage.
-        """
-        word_count = len(current_text.split())
-        images = page.get_images(full=False)
-
-        # 1. Fast Path: If there are no images at all, just check if we have enough digital text.
-        if not images:
-            return word_count < _MIN_DIGITAL_TEXT_WORDS
-
-        # 2. Check Image Coverage: If images exist, calculate how much space they take up.
-        page_rect = page.rect
-        page_area = page_rect.width * page_rect.height
-
-        if page_area > 0:
-            image_info = page.get_image_info()
-            image_area = sum(
-                (info["bbox"][2] - info["bbox"][0])
-                * (info["bbox"][3] - info["bbox"][1])
-                for info in image_info
-                if "bbox" in info
-            )
-
-            # If images cover 10% or more of the page, force OCR to ensure we extract
-            # text from charts, diagrams, or embedded screenshots.
-            if (image_area / page_area) >= 0.10:
-                return True
-
-        # 3. Fallback: Images exist but are tiny (e.g., small logos or bullet point icons).
-        # In this case, fall back to checking if we have enough digital text.
-        return word_count < _MIN_DIGITAL_TEXT_WORDS
-
-    def _page_to_numpy(self, page: fitz.Page) -> np.ndarray:
-        """
-        Convert a PyMuPDF page into a NumPy array suitable for OCR.
-        """
-        page_rect = page.rect
-        # Clip 3% off edges to avoid empty scanner margins
-        crop_rect = fitz.Rect(
-            page_rect.x0 + (page_rect.width * 0.03),
-            page_rect.y0 + (page_rect.height * 0.03),
-            page_rect.x1 - (page_rect.width * 0.03),
-            page_rect.y1 - (page_rect.height * 0.03),
-        )
-
-        pix = page.get_pixmap(dpi=_OCR_DPI, clip=crop_rect, alpha=False)
-
-        # Note the .copy() at the end here. It ensures NumPy takes ownership of the memory,
-        # preventing C-level segfault crashes if PyMuPDF's garbage collector destroys pix early.
-        image_np = (
-            np.frombuffer(pix.samples, dtype=np.uint8)
-            .reshape(pix.height, pix.width, pix.n)
-            .copy()
-        )
-
-        return image_np
+            if temp_path is not None and temp_path.exists():
+                temp_path.unlink(missing_ok=True)
