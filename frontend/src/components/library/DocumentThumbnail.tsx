@@ -79,6 +79,7 @@ export function DocumentThumbnail({
     return () => resizeObserver.disconnect();
   }, []);
 
+  const safeBackPageNumber = numPages != null && numPages > 0 ? Math.min(numPages, Math.max(1, numPages)) : 1;
   const canShowBackPreview = (numPages ?? 0) > 1;
   const showBackPreview = canShowBackPreview && (isHovered || forceBackPreview);
   const shouldRenderBackPreview = canShowBackPreview && (hasInteracted || forceBackPreview);
@@ -114,7 +115,7 @@ export function DocumentThumbnail({
         <Document
           file={fileUrl}
           onLoadSuccess={(result) => {
-            setNumPages(result.numPages);
+            setNumPages(Number.isFinite(result.numPages) && result.numPages > 0 ? result.numPages : 0);
           }}
           loading={<div className="text-xs text-on-surface-variant">Loading preview…</div>}
           error={<div className="px-3 text-center text-xs text-on-surface-variant">PDF preview unavailable</div>}
@@ -136,14 +137,14 @@ export function DocumentThumbnail({
               />
             </div>
 
-            {shouldRenderBackPreview && numPages ? (
+            {shouldRenderBackPreview && numPages != null && numPages >= 1 ? (
               <div
                 className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 motion-reduce:transition-none ${
                   showBackPreview ? "opacity-100" : "opacity-0"
                 }`}
               >
                 <Page
-                  pageNumber={numPages}
+                  pageNumber={safeBackPageNumber}
                   width={pageWidth}
                   renderTextLayer={false}
                   renderAnnotationLayer={false}

@@ -8,6 +8,7 @@ import { DocumentList } from "@/components/documents/DocumentList";
 import { DocumentGrid } from "@/components/library/DocumentGrid";
 import { FileUploader } from "@/components/upload/FileUploader";
 import { useDocuments } from "@/hooks/useDocuments";
+import { normalizeDocumentStatus } from "@/lib/api-client";
 import { API_BASE_URL } from "@/lib/constants";
 
 type ViewMode = "grid" | "list";
@@ -64,20 +65,21 @@ export default function LibraryPage() {
   }, []);
 
   const indexedDocuments = useMemo(
-    () => documents.filter((doc) => doc.status === "indexed"),
+    () => documents.filter((doc) => normalizeDocumentStatus(doc.status) === "indexed"),
     [documents],
   );
 
   const filteredDocuments = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     return documents.filter((doc) => {
+      const normalizedStatus = normalizeDocumentStatus(doc.status);
       const matchesQuery =
         normalizedQuery.length === 0 || doc.original_filename.toLowerCase().includes(normalizedQuery);
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "processing"
-          ? doc.status !== "indexed" && doc.status !== "failed"
-          : doc.status === statusFilter);
+          ? normalizedStatus !== "indexed" && normalizedStatus !== "failed"
+          : normalizedStatus === statusFilter);
 
       return matchesQuery && matchesStatus;
     });
@@ -87,7 +89,7 @@ export default function LibraryPage() {
   const hasNoDocuments = !isLoading && documents.length === 0;
   const hasNoSearchResults = !isLoading && documents.length > 0 && filteredDocuments.length === 0;
   const processingCount = documents.filter(
-    (doc) => doc.status !== "indexed" && doc.status !== "failed",
+    (doc) => normalizeDocumentStatus(doc.status) !== "indexed" && normalizeDocumentStatus(doc.status) !== "failed",
   ).length;
 
   return (

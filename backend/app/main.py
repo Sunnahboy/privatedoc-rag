@@ -6,7 +6,7 @@ from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
 import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi.staticfiles import StaticFiles
 from app.api.document import router as documents_router
 from app.api.health import router as health_router
 from app.api.rag_router import router as rag_router
@@ -21,21 +21,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
-def _warmup_ocr() -> None:
-    try:
-        logger.info("Warming up RapidOCR & CUDA context...")
-        engine = RapidOCREngine()
 
-        # Create a large white image
-        dummy_img = np.full((1200, 1600, 3), 255, dtype=np.uint8)
-
-        # This forces the text recognition model to load into VRAM.
-        dummy_img[500:600, 400:1200, :] = 0
-
-        engine.extract(dummy_img)
-        logger.info("RapidOCR warmed up successfully.")
-    except Exception:
-        logger.exception("Failed to warm up RapidOCR during startup.")
 
 
 # A lifespan context manager
@@ -57,9 +43,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # - Verify Qdrant connection
     # - Verify Ollama connection
 
-    # 1. Warm up the OCR and visual  engine in a separate thread
-    await asyncio.to_thread(_warmup_ocr)
-    app.state.visual_engine = VisualRetrieverEngine()
+    
+    
+    VisualRetrieverEngine._initialize_engine()
     # 2. Database initialization
     logger.info("Database initialized")
     await setup_qdrant_collections()  # check if 'documents_visual' exists,
@@ -93,6 +79,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+#  exposes your PDF files so the Next.js v
+app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
 app.include_router(health_router)
 app.include_router(documents_router)

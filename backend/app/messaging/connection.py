@@ -181,6 +181,28 @@ class RabbitMQManager:
 
     # Shutdown
 
+    async def publish_to_graveyard(self, body: bytes) -> None:
+        """Publish a message directly to the DLQ exchange for dead-letter routing."""
+        if self._is_shutting_down:
+            raise RuntimeError("RabbitMQ manager is shutting down.")
+
+        pool = self._channel_pool
+        if pool is None:
+            raise RuntimeError("RabbitMQ manager has not been initialized.")
+
+        async with pool.acquire() as channel:
+            exchange = await channel.get_exchange(
+                settings.DLX_EXCHANGE_NAME, ensure=True
+            )
+            await exchange.publish(
+                aio_pika.Message(
+                    body=body,
+                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                    content_type="application/json",
+                ),
+                routing_key=settings.DLQ_ROUTING_KEY,
+            )
+
     async def close(self) -> None:
         """Gracefully close RabbitMQ resources."""
         async with self._init_lock:

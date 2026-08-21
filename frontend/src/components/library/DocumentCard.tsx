@@ -2,6 +2,7 @@ import { useState, type FocusEvent, type KeyboardEvent, type MouseEvent } from "
 import dynamic from "next/dynamic";
 
 import type { DocumentListItem } from "@/lib/api-client";
+import { normalizeDocumentStatus } from "@/lib/api-client";
 import { API_BASE_URL } from "@/lib/constants";
 
 const DocumentThumbnail = dynamic(
@@ -23,27 +24,32 @@ interface DocumentCardProps {
 }
 
 function getStatusLabel(status: string): string {
-  if (status === "indexed") {
+  const normalizedStatus = normalizeDocumentStatus(status);
+
+  if (normalizedStatus === "indexed") {
     return "Indexed";
   }
-  if (status === "failed") {
+  if (normalizedStatus === "failed") {
     return "Failed";
   }
   return "Processing";
 }
 
 function getStatusClass(status: string): string {
-  if (status === "indexed") {
+  const normalizedStatus = normalizeDocumentStatus(status);
+
+  if (normalizedStatus === "indexed") {
     return "text-emerald-700";
   }
-  if (status === "failed") {
+  if (normalizedStatus === "failed") {
     return "text-red-700";
   }
   return "text-amber-700";
 }
 
 export function DocumentCard({ document, onOpen, onDelete }: DocumentCardProps) {
-  const canOpen = document.status === "indexed";
+  const normalizedStatus = normalizeDocumentStatus(document.status);
+  const canOpen = normalizedStatus === "indexed";
   const fileUrl = `${API_BASE_URL}/reader/${document.document_id}/file`;
   const [isCardFocused, setIsCardFocused] = useState(false);
 
@@ -97,6 +103,7 @@ export function DocumentCard({ document, onOpen, onDelete }: DocumentCardProps) 
     >
       <div className="aspect-[4/5] border-b border-outline-variant/20 bg-[#f8f6f1] p-4">
         <DocumentThumbnail
+          key={document.document_id}
           documentId={document.document_id}
           originalFilename={document.original_filename}
           fileUrl={fileUrl}
@@ -108,7 +115,7 @@ export function DocumentCard({ document, onOpen, onDelete }: DocumentCardProps) 
         <p className="line-clamp-2 text-sm font-medium leading-5 text-on-surface">{document.original_filename}</p>
         <p className={`text-xs ${getStatusClass(document.status)}`}>
           {getStatusLabel(document.status)}
-          {document.status === "indexed" ? ` · ${document.total_pages} pages` : ""}
+          {normalizedStatus === "indexed" ? ` · ${document.total_pages} pages` : ""}
         </p>
       </div>
 

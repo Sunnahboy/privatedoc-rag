@@ -12,15 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def publish_ingestion_job(document_id: str, storage_key: str) -> None:
     """Publishes a persistent document ingestion job using a pooled channel."""
-    # get the channel
     pool = rabbitmq_manager.get_channel_pool()
-
-    # acquire a channel temporarily
-    async with pool.acquire() as channel:
-        # get the exchange
-        exchange = await channel.get_exchange(
-            settings.DOCUMENT_EXCHANGE_NAME, ensure=True
-        )
 
     payload = DocumentIngestMessage(
         document_id=document_id,
@@ -33,5 +25,10 @@ async def publish_ingestion_job(document_id: str, storage_key: str) -> None:
         content_type="application/json",
     )
 
-    await exchange.publish(message, routing_key=settings.INGESTION_ROUTING_KEY)
+    async with pool.acquire() as channel:
+        exchange = await channel.get_exchange(
+            settings.DOCUMENT_EXCHANGE_NAME, ensure=True
+        )
+        await exchange.publish(message, routing_key=settings.INGESTION_ROUTING_KEY)
+
     logger.info("Publish ingestion job for document: %s", document_id)

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { apiClient, DocumentListItem } from "@/lib/api-client";
+import { apiClient, DocumentListItem, normalizeDocumentStatus } from "@/lib/api-client";
 import { UPLOAD_POLLING_INTERVAL_MS } from "@/lib/constants";
 export type UploadState = "idle" | "uploading" | "polling" | "success" | "error";
 
@@ -19,22 +19,21 @@ export function useDocumentUpload(onSuccess?:()=>void) {
             const pollInterval = setInterval(async () => {
                 try {
                     const latestDoc = await apiClient.getDocument(uploadRes.document_id);
-                    setDocument(latestDoc);
-                    // stop polling when the worker finishes
-                    if (latestDoc.status === "indexed") {
+                    const normalizedStatus = normalizeDocumentStatus(latestDoc.status);
+                    setDocument({ ...latestDoc, status: normalizedStatus });
+
+                    if (normalizedStatus === "indexed") {
                         setStatus("success");
                         clearInterval(pollInterval);
-                        // 3. Trigger the callback to tell the page to refresh!
                         if (onSuccess) {
                             onSuccess();
                         }
 
-                        // 4. Reset the UI back to normal after 2 seconds
                         setTimeout(() => {
-                        setStatus("idle"); // Use whatever your default status is (e.g., "idle" or "ready")
-                        setDocument(null); // Fixed the name based on your TS error!
+                            setStatus("idle");
+                            setDocument(null);
                         }, 2000);
-                    } else if (latestDoc.status === "failed") {
+                    } else if (normalizedStatus === "failed") {
                         setStatus("error");
                         setError("The background worker failed to process this document.");
                         clearInterval(pollInterval);
