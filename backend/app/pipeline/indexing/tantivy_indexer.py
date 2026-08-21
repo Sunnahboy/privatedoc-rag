@@ -1,5 +1,5 @@
 from pathlib import Path
-
+import re
 from app.config import settings
 from app.pipeline.chunking.models import Chunk
 from app.pipeline.retrieval.models import RetrievedChunk
@@ -65,12 +65,12 @@ class TantivyIndexer(BaseSparseIndex):
         - A new Searcher  queries  latest index."""
         writer = self.index.writer()
         for chunk in chunks:
-            doc = Document(
-                document_id=chunk.document_id,
-                chunk_id=chunk.chunk_id,
-                chunk_index=chunk.chunk_index,
-                text=chunk.text,
-            )
+            doc = Document()
+            doc.add_text("document_id", chunk.document_id)
+            doc.add_text("chunk_id", chunk.chunk_id)
+            doc.add_integer("chunk_index", chunk.chunk_index)
+            doc.add_text("text", chunk.text)
+            
             writer.add_document(doc)
         writer.commit()
         self.index.reload()
@@ -82,10 +82,20 @@ class TantivyIndexer(BaseSparseIndex):
         top_k: int,
         document_id: str | None = None,
     ) -> list[RetrievedChunk]:
+        # Reload so this searcher sees segments committed by any other instance.
+        self.index.reload()
+        self.searcher = self.index.searcher()
+        # Remove Lucene special characters that break Tantivy's parser
+        
+        safe_query = re.sub(r'[\+\-\&&\|!(){}[\]^"~*?:\\/]', ' ', query).strip()
+        # Fallback to alphanumeric words if empty
+        if not safe_query:
+            safe_query = query
+
         if document_id:
-            query = f"document_id:{document_id} AND ({query})"
-        if self.searcher is None:
-            self.searcher = self.index.searcher()
+            query = f'document_id:"{document_id}" AND ({query})'
+        else:
+            query = safe_query
         query_parser, errors = self.index.parse_query_lenient(
             query,
             ["document_id", "text"],
