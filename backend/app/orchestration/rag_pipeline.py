@@ -43,6 +43,10 @@ class RAGPipeline(BaseRAGPipeline):
     ) -> GenerateResult:
         reset_profiler()
         rendered_images = []
+        # Initialize metric trackers with safe defaults
+        dense_count = 0
+        sparse_count = 0
+        visual_count = 0
 
         with profile("Retrieval"):
             if self.multimodal_pipeline and document_id:
@@ -50,6 +54,9 @@ class RAGPipeline(BaseRAGPipeline):
                     query=question,
                     document_id=document_id,
                 )
+                dense_count = multimodal_result.dense_hits
+                sparse_count = multimodal_result.sparse_hits
+                visual_count = len(multimodal_result.visual_pages)
                 logger.info(
                     "Visual search result | has_strong_visual_match: %s | visual_pages: %s",
                     multimodal_result.has_strong_visual_match,
@@ -58,7 +65,8 @@ class RAGPipeline(BaseRAGPipeline):
                 retrieved = RetrievalResult(
                     chunks=multimodal_result.fused_chunks,
                     found=bool(multimodal_result.fused_chunks),
-                    dense_hits=len(multimodal_result.text_chunks),
+                    dense_hits=dense_count,
+                    sparse_hits=sparse_count,
                     fused_hits=len(multimodal_result.fused_chunks),
                 )
 
@@ -73,7 +81,7 @@ class RAGPipeline(BaseRAGPipeline):
                                 
                                 #fitz uses 0-based indexing for pages
                                 page = doc[page_num - 1] 
-                                pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
+                                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
                                 
                                 
                                 img = Image.frombytes(
@@ -87,6 +95,8 @@ class RAGPipeline(BaseRAGPipeline):
                     query=question,
                     document_id=document_id,
                 )
+                dense_count = retrieved.dense_hits
+                sparse_count = retrieved.sparse_hits
         if not retrieved.found:
             return GenerateResult(
                 answer="I couldn't find any relevant information in the selected document.",
@@ -104,9 +114,10 @@ class RAGPipeline(BaseRAGPipeline):
         timings = get_timings()
         log_rag_profile(
             timings=timings,
-            dense_hits=retrieved.dense_hits,
-            sparse_hits=retrieved.sparse_hits,
-            fused_hits=retrieved.fused_hits,
+            dense_hits=dense_count,
+            sparse_hits=sparse_count,
+            visual_hits=visual_count,
+            fused_hits=len(retrieved.chunks),
             context_chunks=len(retrieved.chunks),
             context_chars=sum(len(chunk.text) for chunk in retrieved.chunks),
             prompt_chars=result.prompt_chars,
