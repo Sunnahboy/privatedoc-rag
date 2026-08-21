@@ -1,6 +1,6 @@
 import asyncio
 from typing import Self
-
+import uuid
 from app.config import settings
 from app.pipeline.embeddings.models import EmbeddingResult
 from qdrant_client import AsyncQdrantClient
@@ -12,11 +12,11 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
-
+import logging
 from .exceptions import CollectionError, UpsertError
 from .interface import BaseIndexer
 from .models import IndexingRequest, IndexingResult
-
+logger = logging.getLogger(__name__)
 
 class QdrantIndexer(BaseIndexer):
     def __init__(
@@ -24,12 +24,16 @@ class QdrantIndexer(BaseIndexer):
         url: str | None = None,
         api_key: str | None = None,
         collection_name: str | None = None,
+        visual_collection_name: str | None = None,
         batch_size: int | None = None,
         max_concurrent_requests: int | None = None,
     ) -> None:
         self.url = url or settings.qdrant_url
         self.api_key = api_key or settings.qdrant_api_key
         self.collection_name = collection_name or settings.qdrant_collection_name
+        self.visual_collection_name = visual_collection_name or getattr(
+            settings, "qdrant_visual_collection_name", "documents_visual"
+        )
         self.batch_size = batch_size or settings.qdrant_batch_size
         self.max_concurrent_requests = asyncio.Semaphore(
             max_concurrent_requests or settings.qdrant_max_concurrent_requests
@@ -77,10 +81,12 @@ class QdrantIndexer(BaseIndexer):
         self,
         embedding: EmbeddingResult,
     ) -> PointStruct:
+        qdrant_id = str(uuid.uuid5(uuid.NAMESPACE_OID, str(embedding.chunk_id)))
         return PointStruct(
-            id=str(embedding.chunk_id),
+            id=qdrant_id,
             vector=embedding.vector,
             payload={
+                "original_chunk_id": str(embedding.chunk_id),
                 "document_id": str(embedding.document_id),
                 "chunk_index": embedding.chunk_index,
                 "page_number": embedding.page_number,
@@ -140,16 +146,33 @@ class QdrantIndexer(BaseIndexer):
         self,
         document_id: str,
     ) -> None:
-        """Delete all vectors belonging to a document."""
-        await self.client.delete(
-            collection_name=self.collection_name,
-            points_selector=Filter(
-                must=[
-                    FieldCondition(
-                        key="document_id",
-                        match=MatchValue(value=document_id),
+        """Delete all text vectors and visual vectors belonging to a document."""
+        delete_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="document_id",
+                    match=MatchValue(value=document_id),
+                )
+            ]
+        )
+
+        async def _delete_from_collection(collection: str):
+            try:
+                # Check if collection exists first so we don't crash if one is missing
+                if await self.client.collection_exists(collection):
+                    await self.client.delete(
+                        collection_name=collection,
+                        points_selector=delete_filter,
+                        wait=True,
                     )
-                ]
-            ),
-            wait=True,
+                    logger.info(f"Successfully deleted document '{document_id}' from '{collection}'.")
+            except Exception as e:
+                logger.error(
+                    f"Failed to delete document '{document_id}' from '{collection}': {e}", 
+                    exc_info=True
+                )
+
+        await asyncio.gather(
+            _delete_from_collection(self.collection_name),
+            _delete_from_collection(self.visual_collection_name)
         )
