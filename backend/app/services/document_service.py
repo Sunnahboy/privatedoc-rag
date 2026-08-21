@@ -1,9 +1,9 @@
 from pathlib import Path
-
+import fitz
 import aiofiles
 from app.config import settings
 from app.messaging.publisher import publish_ingestion_job
-from app.models.document import Document
+from app.models.document import Document, IngestStatus
 from app.pipeline.indexing.composite_indexer import CompositeIndexer
 from app.schemas.document_schema import (
     DocumentDeleteResponse,
@@ -22,7 +22,9 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
+logger = logging.getLogger(__name__)
 
 class DuplicateDocumentError(Exception):
     """Raised when an uploaded document's SHA-256 hash already exists in the database."""
@@ -98,6 +100,29 @@ async def _save_file_to_disk(file: UploadFile, saved_path: Path) -> int:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Uploaded file is empty",
             )
+       
+        # SANITIZE PDF ANNOTATIONS 
+      
+        try:
+            doc = fitz.open(saved_path)
+            annotations_removed = 0
+            for page in doc:
+                annot = page.first_annot
+                while annot:
+                    next_annot = annot.next
+                    # Types 8, 9, 10, 11 are Highlight, Underline, Squiggly, StrikeOut
+                    if annot.type[0] in [8, 9, 10, 11]:
+                        page.delete_annot(annot)
+                        annotations_removed += 1
+                    annot = next_annot
+            
+            if annotations_removed > 0:
+                doc.save(saved_path, incremental=False, garbage=3, deflate=True)
+            doc.close()
+        except Exception as e:
+            # If it's not a PDF or PyMuPDF fails, skip gracefully
+            logger.warning(f"Could not sanitize annotations for {saved_path.name}: {e}")
+        
 
         return total_size
 
@@ -156,7 +181,7 @@ async def save_uploaded_document(
             content_hash=content_hash,
             storage_provider="local",
             storage_key=stored_filename,
-            status="pending",
+            status=IngestStatus.QUEUED,
             total_pages=0,
             total_chunks=0,
         )
