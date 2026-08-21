@@ -16,6 +16,7 @@ class DocumentUploadResponse(BaseModel):
     document_id: str
     filename: str
     original_filename: str
+    status: str
     file_extension: str
     file_size_bytes: int
     storage_provider: str
