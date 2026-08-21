@@ -27,6 +27,7 @@ def log_rag_profile(
     timings: dict[str, float],
     dense_hits: int,
     sparse_hits: int,
+    visual_hits: int,
     fused_hits: int,
     context_chunks: int,
     prompt_chars: int,
@@ -45,10 +46,12 @@ def log_rag_profile(
 Retrieval
 ├── Dense Hits      : %7d
 ├── Sparse Hits     : %7d
+├── Visual Hits     : %7d
 ├── Fused Hits      : %7d
 ├── Query Embedding : %7.2f ms
 ├── Qdrant Search   : %7.2f ms
 ├── Sparse Search   : %7.2f ms
+├── Visual Search   : %7.2f ms
 ├── RRF Fusion      : %7.2f ms
 └── Cross-Enc Rerank: %7.2f ms
 
@@ -74,10 +77,12 @@ Request Total       : %7.2f ms
 """,
         dense_hits,
         sparse_hits,
+        visual_hits,
         fused_hits,
         timings.get("Query Embedding", 0) * 1000,
         timings.get("Qdrant Search", 0) * 1000,
         timings.get("Sparse Search", 0) * 1000,
+        timings.get("Visual Search", 0) * 1000,
         timings.get("RRF Fusion", 0) * 1000,
         timings.get("Cross-Encoder Reranking", 0) * 1000,  # <-- Added here
         context_chunks,
