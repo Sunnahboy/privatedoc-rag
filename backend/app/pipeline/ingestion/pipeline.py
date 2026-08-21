@@ -20,7 +20,7 @@ from app.pipeline.extraction.factory import ExtractorFactory
 from app.pipeline.indexing.composite_indexer import CompositeIndexer
 from app.pipeline.indexing.interface import BaseIndexer
 from app.pipeline.indexing.models import IndexingRequest
-
+from app.pipeline.chunking.markdown_chunker import MarkdownSemanticChunker
 from .base import BaseIngestionPipeline
 from .exceptions import (
     ChunkingError,
@@ -55,10 +55,9 @@ class IngestionPipeline(BaseIngestionPipeline):
         self.cleaner = cleaner or TextCleaner()
         if chunker is not None:
             self.chunker = chunker
-        elif settings.chunking_strategy == "recursive":
-            self.chunker = RecursiveChunker()
         else:
-            self.chunker = FixedChunker()
+            self.chunker = MarkdownSemanticChunker()
+            
         self.embedder = embedder or OllamaEmbedder()
         self.indexer = indexer or CompositeIndexer()
         self.visual_detector = visual_detector or VisualRichDetector()
@@ -115,13 +114,13 @@ class IngestionPipeline(BaseIngestionPipeline):
             # 3. Chunking
             chunks = await self._run_stage(
                 stage_name="chunking",
-                action=lambda: self.chunker.chunk(cleaning),
+                action=lambda: self.chunker.chunk(cleaning, document_id=document_id),
                 error_cls=ChunkingError,
                 error_msg="Failed chunking cleaned document.",
                 benchmark=benchmark,
             )
 
-            # Chunk Decoration
+            # Guarantee every chunk carries the correct document_id and a stable index.
             for index, chunk in enumerate(chunks):
                 chunk.document_id = document_id
                 chunk.chunk_index = index
