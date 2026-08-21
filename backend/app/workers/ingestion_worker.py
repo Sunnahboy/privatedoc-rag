@@ -9,7 +9,7 @@ from app.database import AsyncSessionLocal
 from app.messaging.connection import rabbitmq_manager
 from app.messaging.messages import DocumentIngestMessage
 from app.messaging.queues import setup_queues_and_bindings
-from app.models.document import Document
+from app.models.document import Document, IngestStatus
 from app.pipeline.ingestion.pipeline import IngestionPipeline
 from app.utils.file_utils import ensure_upload_dir
 from app.utils.logging_utils import configure_logging
@@ -41,12 +41,12 @@ async def process_job(message: IncomingMessage) -> None:
             logger.error("Document %s not found in DB. Dropping job.", document_id)
             await message.ack()  # removed invalid jobs
             return
-        if doc.status == "indexed":
+        if doc.status == IngestStatus.COMPLETED:
             logger.info("Document %s is already indexed skipping", document_id)
             await message.ack()
             return
         stored_filename = doc.stored_filename
-        doc.status = "processing"
+        doc.status = IngestStatus.PROCESSING_TEXT
         await db.commit()
 
         try:
@@ -60,7 +60,7 @@ async def process_job(message: IncomingMessage) -> None:
                     file_path=file_path,
                 )
 
-                doc.status = "indexed"
+                doc.status = IngestStatus.COMPLETED
                 doc.total_chunks = ingestion_result.total_chunks
                 doc.total_pages = ingestion_result.total_pages
                 doc.toc = ingestion_result.toc
@@ -77,7 +77,7 @@ async def process_job(message: IncomingMessage) -> None:
                 "Processing pipeline failed for document %s: %s", document_id, exc
             )
             try:
-                doc.status = "failed"
+                doc.status = IngestStatus.FAILED
                 await db.commit()
             except Exception as db_exc:  # noqa
                 logger.critical(
