@@ -1,4 +1,4 @@
-import { DocumentListItem } from "@/lib/api-client";
+import { DocumentListItem, normalizeDocumentStatus } from "@/lib/api-client";
 
 interface DocumentListProps {
   documents: DocumentListItem[];
@@ -11,10 +11,12 @@ interface DocumentListProps {
 }
 
 function getStatusChipClass(status: string): string {
-  if (status === "indexed") {
+  const normalizedStatus = normalizeDocumentStatus(status);
+
+  if (normalizedStatus === "indexed") {
     return "bg-green-100 text-green-700";
   }
-  if (status === "failed") {
+  if (normalizedStatus === "failed") {
     return "bg-red-100 text-red-700";
   }
   return "bg-amber-100 text-amber-700";
@@ -50,7 +52,8 @@ export function DocumentList({
     <div className="overflow-hidden rounded-lg border border-outline-variant/20 bg-white">
       {documents.map((doc) => {
         const selected = selectedIds.includes(doc.document_id);
-        const canOpen = doc.status === "indexed";
+        const normalizedStatus = normalizeDocumentStatus(doc.status);
+        const canOpen = normalizedStatus === "indexed";
 
         return (
           <div
@@ -80,9 +83,9 @@ export function DocumentList({
                 </p>
                 <div className="mt-1 flex items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${getStatusChipClass(doc.status)}`}>
-                    {doc.status}
+                    {normalizedStatus}
                   </span>
-                  {doc.status === "indexed" && (
+                  {normalizedStatus === "indexed" && (
                     <span className="text-xs text-on-surface-variant">
                       {doc.total_pages} pages
                     </span>
