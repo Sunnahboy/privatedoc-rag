@@ -16,6 +16,7 @@ from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
 from app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
 from qdrant_client import AsyncQdrantClient
 from app.config import settings
+
 router = APIRouter(
     prefix="/rag",
     tags=["RAG"],
@@ -29,12 +30,11 @@ async def get_pipeline() -> AsyncGenerator[RAGPipeline, None]:
         sparse=BM25Retriever(),
     )
     qdrant_client = AsyncQdrantClient(url=settings.qdrant_url) 
-    text_embedder = OllamaEmbedder() 
     visual_engine = VisualRetrieverEngine()
     #Instantiate the actual Multimodal Retriever
     multi_retriever = MultimodalRetriever(
         qdrant_client=qdrant_client,
-        text_embedder=text_embedder,
+        text_retriever=base_retriever,
         visual_engine=visual_engine
     )
 
