@@ -262,9 +262,13 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
 
   const applyReadingMode = useCallback((nextMode: ReaderDisplayMode) => {
     setReadingMode(nextMode);
-    if (nextMode === "study") {
-      setIsAiOpen(true);
+    if (nextMode === "focus") {
+      setIsAiOpen(false);
+      setIsRagExpanded(false);
+      return;
     }
+    setIsAiOpen(true);
+    setIsRagExpanded(nextMode === "study");
   }, []);
 
   const tocResult = useMemo(() => normalizeToc(doc?.toc), [doc?.toc]);
@@ -360,11 +364,13 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
   }
 
   const isFocusMode = readingMode === "focus";
+  const isStudyMode = readingMode === "study";
   // Modes affect visibility, never the user's saved panel dimensions or preferences.
   const effectiveTocOpen = !isFocusMode && isTocOpen;
   const effectiveAiOpen = !isFocusMode && isAiOpen;
   const tocPanelClass = isFocusMode || !effectiveTocOpen ? "-translate-x-full" : "translate-x-0";
   const aiPanelClass = isFocusMode || !effectiveAiOpen ? "translate-x-full" : "translate-x-0 w-full sm:w-96";
+  const chatPanelWidth = isStudyMode ? "50vw" : `${isRagExpanded ? CHAT_WIDTH.max : layout.chatWidth}px`;
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#F4F1EA] text-on-surface antialiased">
@@ -398,7 +404,6 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
             <PanelButton
               label="Focus"
               icon="center_focus_strong"
-              active={false}
               onClick={() => applyReadingMode("focus")}
             />
             <PanelButton
@@ -557,7 +562,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
 
         {!isFocusMode && (
           <aside
-            style={{ "--chat-width": `${isRagExpanded ? CHAT_WIDTH.max : layout.chatWidth}px`, "--reader-header-height": `${layout.headerHeight}px` } as CSSProperties}
+            style={{ "--chat-width": chatPanelWidth, "--reader-header-height": `${layout.headerHeight}px` } as CSSProperties}
             className={`fixed bottom-0 right-0 top-var(--reader-header-height) z-30 w-96 min-w-0 overflow-hidden border-l border-outline-variant/20 bg-white transition-all duration-300 xl:relative xl:top-auto xl:z-0 ${effectiveAiOpen ? "xl:w-(--chat-width) xl:border-l" : "xl:w-0 xl:border-l-0"} ${resizeTarget === "chat" ? "xl:transition-none! xl:select-none" : ""} ${aiPanelClass}`}
           >
             {effectiveAiOpen && (
@@ -566,7 +571,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
             <RagChat
               documentId={id}
               currentPage={currentPage}
-              showDocumentSelector={false}
+              showDocumentSelector={true}
               isExpanded={isRagExpanded}
               onToggleExpanded={() => setIsRagExpanded((current) => !current)}
               className="h-full rounded-none border-0"
