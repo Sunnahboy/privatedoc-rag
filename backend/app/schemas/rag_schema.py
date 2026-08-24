@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class AskRequest(BaseModel):
     question: str
     document_id: str | None = None
+    session_id: str | None = None
 
 
 class CitationResponse(BaseModel):
@@ -14,5 +15,6 @@ class CitationResponse(BaseModel):
 
 
 class AskResponse(BaseModel):
+    session_id: str
     answer: str
     citations: list[CitationResponse]
