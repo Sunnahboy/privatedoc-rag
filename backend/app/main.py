@@ -2,8 +2,9 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+
 from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
-import numpy as np
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -13,10 +14,10 @@ from app.api.rag_router import router as rag_router
 from app.api.reader_router import router as reader_router
 from app.config import settings
 from app.messaging.connection import rabbitmq_manager
-from app.pipeline.ocr import RapidOCREngine
+from app.api.chat import router as chat_router
 from app.qdrant import setup_qdrant_collections
 from app.utils.logging_utils import configure_logging
-
+from app.database import engine
 configure_logging()
 logger = logging.getLogger(__name__)
 
@@ -29,22 +30,9 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Handles backend startup and shutdown tasks.
-
-    why:
-      -startups and shutdowns logic belongs here
-      - initialize the database before serving requests
-      -replaces the older start up event loop style code.
     """
-    # ----Startup logic------
     logger.info("starting %s v%s", settings.app_name, settings.app_version)
-
-    # TODO: Put my connection checks here
-    # - Verify database connection
-    # - Verify Qdrant connection
-    # - Verify Ollama connection
-
-    
-    
+   #Initialize Visual Engine & Qdrant Collections
     VisualRetrieverEngine._initialize_engine()
     # 2. Database initialization
     logger.info("Database initialized")
@@ -55,11 +43,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     #    SHUTDOWN logic
-    # TODO: cleanup code (i.e closing db connections)
     logger.info("Shutting down %s", settings.app_name)
 
     # Gracefully close connections and drain the pool
     await rabbitmq_manager.close()
+    await engine.dispose()#dispose of the async engine on shutdown
 
 
 app = FastAPI(
@@ -86,6 +74,7 @@ app.include_router(health_router)
 app.include_router(documents_router)
 app.include_router(rag_router)
 app.include_router(reader_router)
+app.include_router(chat_router)
 
 
 @app.get("/")
