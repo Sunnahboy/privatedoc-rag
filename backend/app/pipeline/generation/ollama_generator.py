@@ -10,7 +10,7 @@ from .interface import BaseGenerator
 from .models import GenerateResult
 from .prompt_builder import PromptBuilder
 import asyncio
-
+from app.models.chat import ChatMessage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,13 @@ Instructions:
 2. If the context does not contain the answer, explicitly state: "The provided documents do not contain this information." before adding general knowledge.
 3. Structure your response using Markdown (bullet points, bold text, code blocks).
 4. Do not use conversational filler or greetings.
+
+Prior Conversation:
+{chat_history}
+
+<context>
+{context}
+</context>
 
 Question:
 {question}
@@ -42,6 +49,13 @@ Instructions:
 2. Synthesize facts across text chunks and images seamlessly.
 3. Structure your answer using Markdown with proper headings, lists, and code blocks.
 4. Do not use conversational preamble.
+
+Prior Conversation:
+{chat_history}
+
+<context>
+{context}
+</context>
 
 Question:
 {question}
@@ -79,13 +93,17 @@ class OllamaGenerator(BaseGenerator):
         question: str,
         context: list[RetrievedChunk],
         images: list[Image.Image] | None = None,
+        chat_history: list[ChatMessage] | None = None,
     ) -> GenerateResult:
 
         active_template = MULTIMODAL_TEMPLATE if images else TEXT_TEMPLATE
         prompt_builder= PromptBuilder(active_template)
+
+        
         prompt = prompt_builder.build(
             question=question,
             context=context,
+            chat_history=chat_history,
             
         )
 
