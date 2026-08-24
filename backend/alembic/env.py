@@ -5,7 +5,7 @@ from alembic import context
 from app.config import settings
 from app.database import Base
 from app.models.document import Document  # noqa: F401
-
+import app.models.chat  # noqa: F401
 # This import invisibly populates Base.metadata
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
