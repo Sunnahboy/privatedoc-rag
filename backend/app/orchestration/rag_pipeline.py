@@ -15,6 +15,7 @@ from PIL import Image
 from .base import BaseRAGPipeline
 from app.config import settings
 import logging
+from app.models.chat import ChatMessage
 
 logger = logging.getLogger(__name__)
 class RAGPipeline(BaseRAGPipeline):
@@ -40,6 +41,7 @@ class RAGPipeline(BaseRAGPipeline):
         self,
         question: str,
         document_id: str | None = None,
+        chat_history: list[ChatMessage] | None = None,
     ) -> GenerateResult:
         reset_profiler()
         rendered_images = []
@@ -110,6 +112,7 @@ class RAGPipeline(BaseRAGPipeline):
                 question=question,
                 context=retrieved.chunks,
                 images=rendered_images if rendered_images else None,
+                chat_history=chat_history,
             )
         timings = get_timings()
         log_rag_profile(
