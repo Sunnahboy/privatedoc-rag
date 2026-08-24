@@ -20,7 +20,7 @@ export function normalizeDocumentStatus(status?: string | null): DocumentStatus 
     return "processing";
 }
 
-// ... rest of the file stays the same
+
 export interface DocumentUploadResponse{
     document_id: string;
     filename:string;
@@ -45,8 +45,18 @@ export interface Citation{
 }
 
 export interface RagResponse{
+    session_id: string;
     answer:  string;
     citations:Citation[];
+}
+// ChatMessage interface for history
+export interface ChatMessage {
+    id: string;
+    session_id: string;
+    role: "user" | "assistant";
+    content: string;
+    citations: Citation[];
+    created_at: string;
 }
 
 
@@ -83,14 +93,15 @@ export const  apiClient ={
     /**
    * Sends a RAG query to the backend.
    */
-  async askQuestion(query: string, documentIds?: string[], signal?: AbortSignal): Promise<RagResponse> {
+  async askQuestion(query: string, documentIds?: string[],sessionId?: string | null, signal?: AbortSignal): Promise<RagResponse> {
     
     // Translate frontend state into the exact backend schema
     const payload = {
       question: query,
-      // If the user selected multiple docs, just pass the first one for now
+      // If the user selected multiple docs,  pass the first one for now
       // since the backend currently only expects a single string
-      document_id: documentIds && documentIds.length > 0 ? documentIds[0] : null
+      document_id: documentIds && documentIds.length > 0 ? documentIds[0] : null,
+      session_id: sessionId || null // Send to backend
     };
 
     const response = await fetch(`${API_BASE_URL}/rag/ask`, {
@@ -130,6 +141,30 @@ export const  apiClient ={
 
         if (!response.ok) {
             throw new Error(`Failed to delete document: ${response.status}`);
+        }
+    },
+
+    //fetch chat history from the DB
+    async getChatHistory(sessionId: string): Promise<ChatMessage[]> {
+        const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch chat history: ${response.status}`);
+        }
+        
+        return response.json();
+    },
+
+    /**
+     * Deletes a message and all subsequent messages in a session.
+     */
+    async truncateChatHistory(sessionId: string, messageId: string): Promise<void> {
+        const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages/${messageId}`, {
+            method: "DELETE",
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to truncate history: ${response.status}`);
         }
     }
 

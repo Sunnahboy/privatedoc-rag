@@ -233,6 +233,7 @@ export default function ReaderToolbar({
                 <ToolbarButton
                   ariaLabel="Focus reading mode"
                   onClick={() => onReadingModeChange("focus")}
+                  active={readingMode === "focus"}
                 >
                   Focus
                 </ToolbarButton>

@@ -34,6 +34,7 @@ dependencies = [
     "tokenizers<=0.23.0",
     "colpali-engine>=0.3.0",
     "docling",
+    "langchain-text-splitters>=1.1.2",
 ]
 [tool.setuptools.packages.find]
 exclude = ["alembic*"]
