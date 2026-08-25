@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     #generation_model: str ="llama3.2"
     generation_model: str = "gemma3:4b"
     visual_model:str = "gemma3:4b" 
-    generation_timeout: int = 60
+    generation_timeout: int = 120
 
     qdrant_max_concurrent_requests: int = 8
     qdrant_batch_size: int = 64
