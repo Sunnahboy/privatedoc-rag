@@ -12,7 +12,8 @@ from .prompt_builder import PromptBuilder
 import asyncio
 from app.models.chat import ChatMessage
 import logging
-
+import json
+from typing import AsyncGenerator
 logger = logging.getLogger(__name__)
 TEXT_TEMPLATE = """You are an expert technical assistant. Answer the question directly using the provided context.
 
@@ -87,6 +88,85 @@ class OllamaGenerator(BaseGenerator):
         buf = BytesIO()
         img.save(buf, format=format, quality=quality, optimize=False)
         return base64.b64encode(buf.getbuffer()).decode("utf-8")
+
+    async def generate_stream(
+        self,
+        question: str,
+        context: list[RetrievedChunk],
+        images: list[Image.Image] | None = None,
+        chat_history: list[ChatMessage] | None = None,
+            
+    )->AsyncGenerator[dict, None]:
+        """Core generation method: streams response from llm token by token."""
+        active_template = MULTIMODAL_TEMPLATE if images else TEXT_TEMPLATE
+        prompt_builder = PromptBuilder(active_template)
+        prompt = prompt_builder.build(
+            question=question,
+            context=context,
+            chat_history=chat_history,
+        )
+
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": True,
+            "options": {
+                "num_ctx": 8192,
+                "num_predict": 1024,
+            },
+        }
+
+        if images:
+            logger.info("Multimodal Stream: Attaching %d image(s)", len(images))
+            tasks = [asyncio.to_thread(self._to_base64, img) for img in images]
+            payload["images"] = await asyncio.gather(*tasks)
+
+        try:
+            async with self.client.stream(
+                "POST", 
+                f"{self.base_url}/api/generate", 
+                json=payload
+            ) as response:
+                response.raise_for_status()
+                
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    
+                    try:
+                        data = json.loads(line)
+                        if not data.get("done"):
+                            yield {
+                                "type": "token",
+                                "content": data.get("response", "")
+                            }
+                        else:
+                            record_ollama_metrics(data)
+                            
+                            citations_dict = [
+                                {
+                                    "text": chunk.text, 
+                                    "score": chunk.score, 
+                                    "chunk_index": chunk.chunk_index
+                                } for chunk in context
+                            ]
+                            
+                            yield {
+                                "type": "done",
+                                "citations": citations_dict,
+                                "prompt_tokens": data.get("prompt_eval_count", 0),
+                                "completion_tokens": data.get("eval_count", 0),
+                                "prompt_chars": len(prompt)
+                            }
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse streaming line from Ollama: {line}")
+                        continue
+
+        except httpx.HTTPStatusError as exc:
+            raise GenerationError(exc.response.json().get("error", "Unknown error")) from exc
+        except httpx.HTTPError as exc:
+            raise GenerationError("Failed to communicate with Ollama during stream.") from exc
+
     
     async def generate(
         self,
@@ -96,61 +176,26 @@ class OllamaGenerator(BaseGenerator):
         chat_history: list[ChatMessage] | None = None,
     ) -> GenerateResult:
 
-        active_template = MULTIMODAL_TEMPLATE if images else TEXT_TEMPLATE
-        prompt_builder= PromptBuilder(active_template)
+        """
+        Non-streaming wrapper. Accumulates the stream and returns a single GenerateResult.
+        """
+        text_buffer: list[str] = []
+        done_metadata: dict = {}
 
         
-        prompt = prompt_builder.build(
-            question=question,
-            context=context,
-            chat_history=chat_history,
+        # Consume the stream internally
+        async for chunk in self.generate_stream(question, context, images, chat_history):
+            chunk_type = chunk.get("type")
             
-        )
-
-        
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "think": False,
-            "keep_alive": "15m",
-            "options": {
-                "num_ctx": 8192,
-                "num_predict": 1024,
-            },
-        }
-
-        if images:
-            logger.info(
-            "Multimodal Request: Attaching %d rendered page image(s) to model '%s'",
-            len(images),
-            self.model,
-    )
-            tasks = [asyncio.to_thread(self._to_base64, img) for img in images]
-            base64_images = await asyncio.gather(*tasks)
-            payload["images"] = base64_images
-        else:
-            logger.info("Text-Only Request: Querying model '%s'", self.model)
-        try:
-            response = await self.client.post(
-                f"{self.base_url}/api/generate",
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            record_ollama_metrics(data)
-
-        except httpx.HTTPStatusError as exc:
-            raise GenerationError(exc.response.json()["error"]) from exc
-
-        except httpx.HTTPError as exc:
-            raise GenerationError("Failed to communicate with Ollama.") from exc
+            if chunk_type == "token":
+                text_buffer.append(chunk.get("content", ""))
+            elif chunk_type == "done":
+                done_metadata = chunk
 
         return GenerateResult(
-            answer=data["response"],
+            answer="".join(text_buffer),
             citations=context,
-            prompt_tokens=data["prompt_eval_count"],
-            completion_tokens=data["eval_count"],
-            prompt_chars=len(prompt),
+            prompt_tokens=done_metadata.get("prompt_tokens", 0),
+            completion_tokens=done_metadata.get("completion_tokens", 0),
+            prompt_chars=done_metadata.get("prompt_chars", 0),
         )
