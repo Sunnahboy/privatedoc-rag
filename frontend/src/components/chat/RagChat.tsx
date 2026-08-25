@@ -68,6 +68,7 @@ export function RagChat({
   const inlineEditTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const submitInFlightRef = useRef(false);
 
   // Sync database history into the UI!
   useEffect(() => {
@@ -162,10 +163,15 @@ export function RagChat({
     baseMessages: ChatMessage[] = messages,
     shouldClearComposer = true,
   ) => {
+    if (submitInFlightRef.current || isLoading) {
+      return;
+    }
+
     const trimmed = prompt.trim();
     if (!trimmed) {
       return;
     }
+    submitInFlightRef.current = true;
 
     const now = new Date().toISOString();
     const nextMessages: ChatMessage[] = [
@@ -228,6 +234,7 @@ export function RagChat({
         ]);
       }
     } finally {
+      submitInFlightRef.current = false;
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
       }
@@ -539,6 +546,10 @@ export function RagChat({
                 value={query}
                 onChange={(changeEvent) => setQuery(changeEvent.target.value)}
                 onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing) {
+                    return;
+                  }
+
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     if (!isLoading && query.trim()) {
