@@ -16,7 +16,7 @@ from .base import BaseRAGPipeline
 from app.config import settings
 import logging
 from app.models.chat import ChatMessage
-
+from typing import AsyncGenerator
 logger = logging.getLogger(__name__)
 class RAGPipeline(BaseRAGPipeline):
     """Acts as a coordinator of the full workflow: retrieve context, generate a response and then shut everything down cleanly."""
@@ -127,7 +127,122 @@ class RAGPipeline(BaseRAGPipeline):
         )
 
         return result
+   
 
+    async def ask_stream(
+        self,
+        question: str,
+        document_id: str | None = None,
+        chat_history: list[ChatMessage] | None = None,
+    ) -> AsyncGenerator[dict, None]:
+        
+        reset_profiler()
+        rendered_images = []
+        dense_count = 0
+        sparse_count = 0
+        visual_count = 0
+
+        # Yield a status update so the UI knows we are working
+        yield {
+            "type": "status",
+            "message": "Searching document vectors..."
+        }
+
+        with profile("Retrieval"):
+            if self.multimodal_pipeline and document_id:
+                multimodal_result = await self.multimodal_pipeline.search(
+                    query=question,
+                    document_id=document_id,
+                )
+                dense_count = multimodal_result.dense_hits
+                sparse_count = multimodal_result.sparse_hits
+                visual_count = len(multimodal_result.visual_pages)
+                
+                logger.info(
+                    "Visual search result | has_strong_visual_match: %s | visual_pages: %s",
+                    multimodal_result.has_strong_visual_match,
+                    [vp["page_number"] for vp in multimodal_result.visual_pages],
+                )
+                
+                retrieved = RetrievalResult(
+                    chunks=multimodal_result.fused_chunks,
+                    found=bool(multimodal_result.fused_chunks),
+                    dense_hits=dense_count,
+                    sparse_hits=sparse_count,
+                    fused_hits=len(multimodal_result.fused_chunks),
+                )
+
+                if multimodal_result.has_strong_visual_match:
+                    yield {
+                        "type": "status",
+                        "message": f"Extracting {visual_count} relevant visual pages..."
+                    }
+                    
+                    pdf_path = Path(settings.upload_dir) / f"{document_id}.pdf"
+                    if pdf_path.exists():
+                        with fitz.open(pdf_path) as doc:
+                            for vp in multimodal_result.visual_pages:
+                                page_num = vp["page_number"]
+                                page = doc[page_num - 1] 
+                                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+                                
+                                img = Image.frombytes(
+                                    "RGBA" if pix.alpha else "RGB", 
+                                    [pix.width, pix.height], 
+                                    pix.samples
+                                )
+                                rendered_images.append(img)
+            else:
+                retrieved = await self.retriever.retrieve(
+                    query=question,
+                    document_id=document_id,
+                )
+                dense_count = retrieved.dense_hits
+                sparse_count = retrieved.sparse_hits
+
+        # Handle empty results gracefully through the stream
+        if not retrieved.found:
+            yield {
+                "type": "token", 
+                "content": "I couldn't find any relevant information in the selected document."
+            }
+            yield {
+                "type": "done",
+                "citations": [],
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "prompt_chars": 0
+            }
+            return
+
+        yield {
+            "type": "status",
+            "message": "Drafting response..."
+        }
+
+        with profile("Generation"):
+            async for chunk in self.generator.generate_stream(
+                question=question,
+                context=retrieved.chunks,
+                images=rendered_images if rendered_images else None,
+                chat_history=chat_history,
+            ):
+                # When generation finishes, log our profiler metrics before sending the final chunk
+                if chunk["type"] == "done":
+                    timings = get_timings()
+                    log_rag_profile(
+                        timings=timings,
+                        dense_hits=dense_count,
+                        sparse_hits=sparse_count,
+                        visual_hits=visual_count,
+                        fused_hits=len(retrieved.chunks),
+                        context_chunks=len(retrieved.chunks),
+                        context_chars=sum(len(c.text) for c in retrieved.chunks),
+                        prompt_chars=chunk.get("prompt_chars", 0),
+                    )
+                
+                # Yield the token or done chunk up to the router
+                yield chunk
     async def close(self):
         await self.retriever.close()
         await self.generator.close()
