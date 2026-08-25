@@ -23,7 +23,6 @@ from app.messaging.connection import rabbitmq_manager
 from app.pipeline.detector.models import DocumentVisualJobMessage
 from app.models.document import Document
 
-# Mocked import: You will build this wrapper class to house the Transformers/PyTorch logic
 from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
 from app.utils.file_utils import ensure_upload_dir
 from app.utils.logging_utils import configure_logging
@@ -141,7 +140,7 @@ async def run_worker() -> None:
 
     await rabbitmq_manager.initialize()
     channel = await rabbitmq_manager.create_consumer_channel()
-    # CRITICAL: ColPali takes VRAM/RAM. Process 1 visually-rich page at a time.
+    #ColPali takes VRAM/RAM. Process 1 visually-rich page at a time.
     await channel.set_qos(prefetch_count=1)
 
     queue = await channel.declare_queue("document.visual.queue", durable=True)
