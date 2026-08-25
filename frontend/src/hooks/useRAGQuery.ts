@@ -1,5 +1,5 @@
-import { useState,useEffect } from "react";
-import { apiClient, RagResponse, ChatMessage } from "@/lib/api-client";
+import { useState, useEffect, useRef } from "react";
+import { apiClient, RagResponse, ChatMessage, StreamChunk, Citation } from "@/lib/api-client";
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
@@ -12,8 +12,17 @@ export function useRAGQuery() {
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  //Load session from localStorage on mount
+  // Use a mutable ref to track the current sessionId during asynchronous stream loops
+  const sessionIdRef = useRef<string | null>(null);
+
+  // Sync ref with state whenever sessionId updates
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  // Load session from localStorage on mount
   useEffect(() => {
     const savedSessionId = localStorage.getItem("rag_session_id");
     if (savedSessionId) {
@@ -28,65 +37,125 @@ export function useRAGQuery() {
       setChatHistory(history);
     } catch (err) {
       console.error("Failed to load chat history:", err);
-      // If the session is invalid/not found, clear it
       localStorage.removeItem("rag_session_id");
       setSessionId(null);
     }
   };
 
-  // askQuestion can be used as a form submit handler (askQuestion(e))
-    // or called programmatically with selected doc ids (askQuestion(undefined, selectedDocIds))
-    // askQuestion: optional event, optional selectedDocIds, optional explicitQuery override
-    const askQuestion = async (
-      e?: React.SyntheticEvent,
-      selectedDocIds?: string[],
-      explicitQuery?: string,
-      signal?: AbortSignal,
-    ) => {
-      if (e && typeof (e as React.SyntheticEvent).preventDefault === "function") e.preventDefault();
+  const askQuestion = async (
+    e?: React.SyntheticEvent,
+    selectedDocIds?: string[],
+    explicitQuery?: string,
+    signal?: AbortSignal,
+  ): Promise<RagResponse | null> => {
+    if (e && typeof (e as React.SyntheticEvent).preventDefault === "function") e.preventDefault();
 
-      const q = typeof explicitQuery === 'string' ? explicitQuery : query;
-      if (!q || !q.trim()) return null;
+    const q = typeof explicitQuery === 'string' ? explicitQuery : query;
+    if (!q || !q.trim()) return null;
 
-      try {
-        setIsLoading(true);
-        setError(null);
-        setResponse(null); // Clear previous answer
+    try {
+      setIsLoading(true);
+      setError(null);
+      setResponse(null); 
+      setStatusMessage("Initializing query...");
 
-        const docs = selectedDocIds && selectedDocIds.length > 0 ? selectedDocIds : undefined;
-        const result = await apiClient.askQuestion(q, docs, sessionId, signal);
+      const docs = selectedDocIds && selectedDocIds.length > 0 ? selectedDocIds : undefined;
+      const tempAssistantMsgId = `temp-asst-${Date.now()}`;
 
-        // If the backend gave us a new session ID, save it to state & localStorage
-      if (result.session_id && result.session_id !== sessionId) {
-        setSessionId(result.session_id);
-        localStorage.setItem("rag_session_id", result.session_id);
-      }
-      setResponse(result);
-      //Refresh the chat history to include the new Q&A
-      if (result.session_id) {
-          await loadHistory(result.session_id);
-      }
-        return result;
+      // Capture snapshot of current session ID securely from the ref
+      const currentSessionId = sessionIdRef.current;
 
-      } catch (err: unknown) {
-        // If the request was aborted, don't treat as an error to show to the user
-        if (isAbortError(err)) {
-          // Keep error state untouched for aborts
-          return null;
+      setChatHistory((prev) => [
+        ...prev,
+        { 
+          id: tempAssistantMsgId, 
+          session_id: currentSessionId || "", 
+          role: "assistant", 
+          content: "", 
+          citations: [], 
+          created_at: new Date().toISOString() 
         }
-        setError(err instanceof Error ? err.message : "Failed to get an answer.");
-        return null;
-      } finally {
-        // Always unlock the input even if network call fails or throws.
-        setIsLoading(false);
+      ]);
+
+      let finalSessionId = currentSessionId;
+      let streamedAnswer = "";
+      let streamedCitations: Citation[] = [];
+      let finalResponse: RagResponse | null = null;
+      let hasClearedStatusForStream = false;
+
+      await apiClient.askQuestionStream(
+        q,
+        docs,
+        currentSessionId,
+        (chunk: StreamChunk) => {
+          if (chunk.type === "session") {
+            finalSessionId = chunk.session_id;
+            setSessionId(chunk.session_id);
+            localStorage.setItem("rag_session_id", chunk.session_id);
+          }
+          else if (chunk.type === "status") {
+            setStatusMessage((prev) => (prev !== chunk.message ? chunk.message : prev));
+          }
+          else if (chunk.type === "token") {
+            if (!hasClearedStatusForStream) {
+              hasClearedStatusForStream = true;
+              setStatusMessage(null);
+            }
+            
+            streamedAnswer += chunk.content;
+            
+            setChatHistory((prev) => prev.map((msg) => 
+              msg.id === tempAssistantMsgId 
+                ? { ...msg, content: streamedAnswer } 
+                : msg
+            ));
+          } 
+          else if (chunk.type === "done") {
+            setStatusMessage(null);
+            streamedCitations = chunk.citations;
+            
+            setChatHistory((prev) => prev.map((msg) => 
+              msg.id === tempAssistantMsgId 
+                ? { ...msg, citations: streamedCitations } 
+                : msg
+            ));
+
+            if (finalSessionId) {
+                finalResponse = {
+                  session_id: finalSessionId,
+                  answer: streamedAnswer,
+                  citations: streamedCitations
+                };
+                setResponse(finalResponse);
+            }
+          }
+          else if (chunk.type === "error") {
+             setError(chunk.error);
+          }
+        },
+        signal
+      );
+
+      if (finalSessionId) {
+        await loadHistory(finalSessionId);
       }
-    };
+      return finalResponse;
+
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
+        return null;
+      }
+      setError(err instanceof Error ? err.message : "Failed to get an answer.");
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const clearChat = () => {
     setQuery("");
     setResponse(null);
     setError(null);
-    //Clear session state completely 
     setSessionId(null);
     setChatHistory([]);
     localStorage.removeItem("rag_session_id");
@@ -100,8 +169,8 @@ export function useRAGQuery() {
     error,
     askQuestion,
     clearChat,
-    //Expose history to the UI
     chatHistory,
-    sessionId
+    sessionId,
+    statusMessage
   };
 }
