@@ -22,14 +22,47 @@ export function useRAGQuery() {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
 
-  // Load session from localStorage on mount
+  // Load persisted session and chat history from localStorage on mount.
   useEffect(() => {
     const savedSessionId = localStorage.getItem("rag_session_id");
+    const savedHistory = localStorage.getItem("rag_chat_history");
+
     if (savedSessionId) {
       setSessionId(savedSessionId);
+    }
+
+    if (savedHistory) {
+      try {
+        const parsedHistory = JSON.parse(savedHistory) as ChatMessage[];
+        if (Array.isArray(parsedHistory)) {
+          setChatHistory(parsedHistory);
+        }
+      } catch (err) {
+        console.error("Failed to parse cached chat history:", err);
+        localStorage.removeItem("rag_chat_history");
+      }
+    }
+
+    if (savedSessionId) {
       loadHistory(savedSessionId);
     }
   }, []);
+
+  useEffect(() => {
+    const serialized = JSON.stringify(chatHistory);
+    const stored = localStorage.getItem("rag_chat_history");
+
+    if (chatHistory.length > 0) {
+      if (stored !== serialized) {
+        localStorage.setItem("rag_chat_history", serialized);
+      }
+      return;
+    }
+
+    if (stored) {
+      localStorage.removeItem("rag_chat_history");
+    }
+  }, [chatHistory]);
 
   const loadHistory = async (id: string) => {
     try {
@@ -82,51 +115,52 @@ export function useRAGQuery() {
       let streamedCitations: Citation[] = [];
       let finalResponse: RagResponse | null = null;
       let hasClearedStatusForStream = false;
+      let lastUpdateTime = 0;
 
       await apiClient.askQuestionStream(
         q,
         docs,
-        currentSessionId,
+        sessionId,
         (chunk: StreamChunk) => {
           if (chunk.type === "session") {
             finalSessionId = chunk.session_id;
             setSessionId(chunk.session_id);
             localStorage.setItem("rag_session_id", chunk.session_id);
-          }
+          } 
           else if (chunk.type === "status") {
-            setStatusMessage((prev) => (prev !== chunk.message ? chunk.message : prev));
+             setStatusMessage(chunk.message);
           }
           else if (chunk.type === "token") {
-            if (!hasClearedStatusForStream) {
-              hasClearedStatusForStream = true;
-              setStatusMessage(null);
-            }
-            
+            setStatusMessage(null);
             streamedAnswer += chunk.content;
             
-            setChatHistory((prev) => prev.map((msg) => 
-              msg.id === tempAssistantMsgId 
-                ? { ...msg, content: streamedAnswer } 
-                : msg
-            ));
+            // THROTTLE STATE UPDATES TO ONCE EVERY 50ms
+            const now = Date.now();
+            if (now - lastUpdateTime > 50) {
+                setChatHistory((prev) => prev.map((msg) => 
+                  msg.id === tempAssistantMsgId 
+                    ? { ...msg, content: streamedAnswer } 
+                    : msg
+                ));
+                lastUpdateTime = now;
+            }
           } 
           else if (chunk.type === "done") {
-            setStatusMessage(null);
             streamedCitations = chunk.citations;
             
+            // FINAL FLUSH: Guarantee the final state is fully updated when done
             setChatHistory((prev) => prev.map((msg) => 
               msg.id === tempAssistantMsgId 
-                ? { ...msg, citations: streamedCitations } 
+                ? { ...msg, content: streamedAnswer, citations: streamedCitations } 
                 : msg
             ));
 
             if (finalSessionId) {
-                finalResponse = {
-                  session_id: finalSessionId,
-                  answer: streamedAnswer,
-                  citations: streamedCitations
-                };
-                setResponse(finalResponse);
+                setResponse({
+                    session_id: finalSessionId,
+                    answer: streamedAnswer,
+                    citations: streamedCitations
+                });
             }
           }
           else if (chunk.type === "error") {
@@ -152,6 +186,30 @@ export function useRAGQuery() {
     }
   };
 
+  const handleEditMessage = async (messageId: string, newText: string, selectedDocIds?: string[]) => {
+    const activeSessionId = sessionIdRef.current ?? sessionId;
+    if (!activeSessionId || !newText.trim()) return;
+
+    try {
+      // 1. Only call the backend DELETE if it is a real database UUID, 
+      // skipping temporary optimistic IDs to prevent 404 errors.
+      if (!messageId.startsWith("temp-")) {
+        await apiClient.truncateChatHistory(activeSessionId, messageId);
+      }
+
+      // 2. Optimistically slice the UI state
+      setChatHistory((prev) => {
+        const index = prev.findIndex((message) => message.id === messageId);
+        return index !== -1 ? prev.slice(0, index) : prev;
+      });
+
+      // 3. Re-trigger the generation
+      await askQuestion(undefined, selectedDocIds, newText);
+    } catch (err) {
+      console.error("Failed to edit message:", err);
+    }
+  };
+
   const clearChat = () => {
     setQuery("");
     setResponse(null);
@@ -159,6 +217,7 @@ export function useRAGQuery() {
     setSessionId(null);
     setChatHistory([]);
     localStorage.removeItem("rag_session_id");
+    localStorage.removeItem("rag_chat_history");
   };
 
   return {
@@ -168,6 +227,7 @@ export function useRAGQuery() {
     response,
     error,
     askQuestion,
+    handleEditMessage,
     clearChat,
     chatHistory,
     sessionId,
