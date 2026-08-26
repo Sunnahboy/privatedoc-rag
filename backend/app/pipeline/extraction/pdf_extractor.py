@@ -45,7 +45,7 @@ class PDFExtractor(BaseExtractor):
             
             pipeline_options.accelerator_options = AcceleratorOptions(
                 num_threads=4, 
-                device="cpu"  
+                device="cuda"  
             )
             
             # Apply options to the converter and cache it at the class level

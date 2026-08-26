@@ -25,7 +25,7 @@ async def create_session(title: str = "New RAG Session", db: AsyncSession = Depe
     return new_session
 
 @router.get("/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])
-async def get_recent_messages(session_id: str, limit: int = 5, db: AsyncSession = Depends(get_db)):
+async def get_recent_messages(session_id: str, limit: int = 100, db: AsyncSession = Depends(get_db)):
     """
     SLIDING WINDOW: Only fetches the 'limit' most recent messages.
     Uses SQLAlchemy 2.0 async select statements.

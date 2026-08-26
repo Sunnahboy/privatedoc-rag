@@ -19,6 +19,9 @@ from app.config import settings
 import uuid
 from sqlalchemy import select, desc
 from app.models.chat import ChatSession, ChatMessage
+import json
+from fastapi import Request
+from fastapi.responses import StreamingResponse
 router = APIRouter(
     prefix="/rag",
     tags=["RAG"],
@@ -80,31 +83,32 @@ async def fetch_sliding_window_history(session_id: str, db: AsyncSession, limit:
     return list(reversed(messages))
 
 
-@router.post("/ask", response_model=AskResponse)
+@router.post("/ask")
 async def ask(
-    request: AskRequest,
+    request: Request,           
+    payload: AskRequest,
     pipeline: Annotated[RAGPipeline, Depends(get_pipeline)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """The API doorway to  RAG pipeline it validates the request,
-    calls the pipeline, and formats the result for the frontend."""
+    uses Server-Sent Events (SSE) to stream tokens in real-time."""
 
-    if request.document_id:
+    if payload.document_id:
         document = await document_service.get_document_by_id(
-            request.document_id,
+            payload.document_id,
             db,
         )
 
         if document is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document '{request.document_id}' not found.",
+                detail=f"Document '{payload.document_id}' not found.",
             )
             # Resolve the Chat Session
     active_session_id = await get_or_create_session(
-        session_id=request.session_id,
+        session_id=payload.session_id,
         db=db,
-        title_fallback=request.question
+        title_fallback=payload.question
     )
 
     # Grab the Sliding Window History
@@ -115,49 +119,68 @@ async def ask(
         id=str(uuid.uuid4()),
         session_id=active_session_id,
         role="user",
-        content=request.question,
+        content=payload.question,
         citations=[]
     )
     db.add(user_msg)
     await db.commit()
 
-    result = await pipeline.ask(
-        question=request.question,
-        document_id=request.document_id,
-        chat_history=recent_history,
-    )
 
-    # Format the citations so they can be saved as JSON in PostgreSQL
-    formatted_citations = [
-        {
-            "document_id": c.document_id,
-            "chunk_index": c.chunk_index,
-            "text": c.text,
-            "score": float(c.score)
-        } for c in result.citations
-    ]
+    #Define the Async Generator for SSE
+    async def event_generator():
+        # Send the session_id immediately so the frontend knows it
+        yield f"data: {json.dumps({'type': 'session', 'session_id': active_session_id})}\n\n"
 
-    #Save the Assistant's Answer
-    assistant_msg = ChatMessage(
-        id=str(uuid.uuid4()),
-        session_id=active_session_id,
-        role="assistant",
-        content=result.answer,
-        citations=formatted_citations
-    )
-    db.add(assistant_msg)
-    await db.commit()
+        full_text = ""
+        final_citations = []
 
-    return AskResponse(
-        session_id=active_session_id,
-        answer=result.answer,
-        citations=[
-            CitationResponse(
-                document_id=c.document_id,
-                chunk_index=c.chunk_index,
-                text=c.text,
-                score=c.score,
-            )
-            for c in result.citations
-        ],
-    )
+        try:
+            async for chunk in pipeline.ask_stream(
+                question=payload.question,
+                document_id=payload.document_id,
+                chat_history=recent_history,
+            ):
+                # Detect if the frontend hit "Stop" or the user closed the tab
+                if await request.is_disconnected():
+                    print("Client disconnected! Aborting stream.")
+                    break
+
+                # Send the chunk to the frontend
+                yield f"data: {json.dumps(chunk)}\n\n"
+
+                # Keep track of text and citations so  can save to DB
+                chunk_type = chunk.get("type")
+                if chunk_type == "token":
+                    full_text += chunk.get("content", "")
+                elif chunk_type == "done":
+                    final_citations = chunk.get("citations", [])
+                    
+        except Exception as e:
+            # Send error cleanly down the stream
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            return
+            
+        # Save the completed Assistant message to PostgreSQL
+        formatted_citations = [
+            {
+                "document_id": c.get("document_id", payload.document_id),
+                "chunk_index": c.get("chunk_index"),
+                "text": c.get("text"),
+                "score": float(c.get("score", 0.0))
+            } for c in final_citations
+        ]
+
+        assistant_msg = ChatMessage(
+            id=str(uuid.uuid4()),
+            session_id=active_session_id,
+            role="assistant",
+            content=full_text,
+            citations=formatted_citations
+        )
+        db.add(assistant_msg)
+        await db.commit()
+
+    # 5. Return the Streaming Response using the SSE media type
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+    
