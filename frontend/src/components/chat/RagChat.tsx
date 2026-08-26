@@ -56,7 +56,7 @@ export function RagChat({
   onToggleExpanded,
   className,
 }: RagChatProps) {
-  const { query, setQuery, isLoading, askQuestion, error, clearChat, chatHistory } = useRAGQuery();
+  const { query, setQuery, isLoading, askQuestion, error, clearChat, chatHistory, handleEditMessage } = useRAGQuery();
   const { documents, isLoading: docsLoading, fetchDocuments } = useDocuments({ autoFetch: showDocumentSelector });
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -64,6 +64,7 @@ export function RagChat({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [inlineEditText, setInlineEditText] = useState("");
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
+  const [isAutoScroll, setIsAutoScroll] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const inlineEditTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationRef = useRef<HTMLDivElement | null>(null);
@@ -72,19 +73,28 @@ export function RagChat({
 
   // Sync database history into the UI!
   useEffect(() => {
-    if (chatHistory && chatHistory.length > 0) {
-      setMessages(
-        chatHistory.map((msg) => ({
-          id: msg.id,
-          // Map backend "assistant" to frontend "ai"
-          role: msg.role === "assistant" ? "ai" : "user",
-          content: msg.content,
-          created_at: msg.created_at,
-          citations: msg.citations,
-        }))
-      );
+    if (!chatHistory || chatHistory.length === 0) {
+      if (messages.length > 0) {
+        setMessages([]);
+      }
+      return;
     }
-  }, [chatHistory]);
+
+    const nextMessages: ChatMessage[] = chatHistory.map((msg) => ({
+      id: msg.id,
+      role: msg.role === "assistant" ? "ai" : "user",
+      content: msg.content,
+      created_at: msg.created_at,
+      citations: msg.citations,
+    }));
+
+    const serializedCurrent = JSON.stringify(messages);
+    const serializedNext = JSON.stringify(nextMessages);
+
+    if (serializedCurrent !== serializedNext) {
+      setMessages(nextMessages);
+    }
+  }, [chatHistory, messages]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -98,13 +108,25 @@ export function RagChat({
     textarea.style.overflowY = textarea.scrollHeight > COMPOSER_MAX_HEIGHT ? "auto" : "hidden";
   }, [query]);
 
-  useEffect(() => {
+  const handleScroll = () => {
     const container = conversationRef.current;
     if (!container) {
       return;
     }
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    setIsAutoScroll(isNearBottom);
+  };
+
+  useEffect(() => {
+    const container = conversationRef.current;
+    if (!container || !isAutoScroll) {
+      return;
+    }
+
     container.scrollTop = container.scrollHeight;
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isAutoScroll]);
 
   useEffect(() => {
     const textarea = inlineEditTextareaRef.current;
@@ -252,12 +274,12 @@ export function RagChat({
       return;
     }
 
-    const index = messages.findIndex((message) => message.id === messageId);
-    const truncatedMessages = index === -1 ? messages : messages.slice(0, index);
-
-    setMessages(truncatedMessages);
     cancelInlineEdit();
-    await submitQuery(trimmed, truncatedMessages, false);
+    await handleEditMessage(
+      messageId,
+      trimmed,
+      selectedDocumentId ? [selectedDocumentId] : undefined,
+    );
   };
 
   return (
@@ -377,7 +399,11 @@ export function RagChat({
         )}
       </div>
 
-      <div ref={conversationRef} className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#faf8f2_0%,#f7f5ef_100%)] p-4">
+      <div
+        ref={conversationRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#faf8f2_0%,#f7f5ef_100%)] p-4"
+      >
         <div className="space-y-5">
           {messages.length === 0 && !isLoading && (
             <div className="flex h-full min-h-40 items-center justify-center text-center text-sm text-on-surface-variant">
