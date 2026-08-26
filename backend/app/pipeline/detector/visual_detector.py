@@ -29,7 +29,13 @@ class PageVisualSignals(BaseModel):
     drawing_count: int
     drawing_coverage_ratio: float
     combined_graphic_ratio: float
+    @property
+    def image_area_ratio(self) -> float:
+        return self.image_coverage_ratio
 
+    @property
+    def drawing_area_ratio(self) -> float:
+        return self.drawing_coverage_ratio
 @dataclass
 class VisualDetectionResult:
     page_number: int
