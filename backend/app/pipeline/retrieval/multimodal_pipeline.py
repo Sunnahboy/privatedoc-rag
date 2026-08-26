@@ -6,11 +6,6 @@ from app.pipeline.retrieval.multimodal_retriever import MultimodalRetriever
 
 from .flashrank_reranker import FlashRankReranker
 
-# app/pipeline/retrieval/fusion/__init__.py
-from .fusion.rrf import RRFFusion
-
-__all__ = ["RRFFusion"]
-
 
 @dataclass
 class UnifiedRetrievalResult:
@@ -30,12 +25,12 @@ class MultimodalRetrievalPipeline:
         self,
         retriever: MultimodalRetriever,
         reranker: FlashRankReranker | None = None,
-        fusion_engine: RRFFusion | None = None,
+        fusion_engine: FlashRankReranker | None = None,
         visual_score_threshold: float = 12.0,  # Minimum ColQwen MaxSim score
     ):
         self.retriever = retriever
         self.reranker = reranker or FlashRankReranker()
-        self.fusion = fusion_engine or RRFFusion()
+        self.fusion = fusion_engine or FlashRankReranker()
         self.visual_score_threshold = visual_score_threshold
 
     async def search(
@@ -43,14 +38,14 @@ class MultimodalRetrievalPipeline:
         query: str,
         document_id: str,
         text_top_k: int = 20,
-        visual_top_k: int = 10,
+        visual_top_k: int = 2,
         final_top_k: int = 8,
     ) -> UnifiedRetrievalResult:
         # 1. Parallel search in Qdrant
         raw_results = await self.retriever.retrieve(
             query=query,
             document_id=document_id,
-            limit=max(text_top_k, visual_top_k),
+            limit=max(text_top_k, 10),
         )
 
         # 2. Rerank text chunks via FlashRank
@@ -59,11 +54,11 @@ class MultimodalRetrievalPipeline:
                 chunk_id=f"{document_id}_text_{idx}",
                 document_id=document_id,
                 text=item["text"],
-                page_number=item["page_number"],
-                score=item["score"],
+                page_number=item.get("page_number"),
+                score=item.get("score", 0.0),
                 chunk_index=idx,
             )
-            for idx, item in enumerate(raw_results["text_chunks"])
+            for idx, item in enumerate(raw_results.get("text_chunks", []))
         ]
         reranked_chunks = self.reranker.rerank(
             query=query,
@@ -71,32 +66,26 @@ class MultimodalRetrievalPipeline:
             top_k=final_top_k,
         )
 
-        # 3. Filter visual pages by threshold
-        valid_visual_pages = [
+        # Filter and Sort Visual Pages (Keep only the absolute best 1 or 2)
+        matched_visual_pages = [
             vp
-            for vp in raw_results["visual_pages"]
+            for vp in raw_results.get("visual_pages", [])
             if vp.get("score", 0.0) >= self.visual_score_threshold
-        ][:visual_top_k]
+        ]
+
+        valid_visual_pages = sorted(
+            matched_visual_pages,
+            key=lambda x: x.get("score", 0.0),
+            reverse=True,
+        )[:visual_top_k]
 
         has_strong_visual_match = len(valid_visual_pages) > 0
 
-        # Transform visual page hits into pseudo-RetrievedChunks for RRFFusion
-        visual_chunks = [
-            RetrievedChunk(
-                chunk_id=f"{document_id}_visual_page_{vp['page_number']}",
-                document_id=document_id,
-                chunk_index=vp['page_number'],
-                text=f"[Visual Asset: Page {vp['page_number']} - Reasons: {vp.get('reasons', [])}]",
-                page_number=vp['page_number'],
-                score=vp['score'],
-            )
-            for vp in valid_visual_pages
-        ]
+       
+        # assign the real text directly to fused_chunks. 
+        fused_chunks = reranked_chunks
 
-        # 4. RRFFusion Integration (Combines text chunks and visual page tokens cleanly)
-        fused_chunks = self.fusion.fuse(reranked_chunks, visual_chunks)[:final_top_k]
-
-        # Derive aggregated page ranks from the fused output for easy context rendering
+        # Derive aggregated page ranks for the UI based on the top 8 text chunks
         page_rrf_scores: dict[int, float] = {}
         for chunk in fused_chunks:
             if chunk.page_number is not None:
