@@ -56,7 +56,7 @@ class FlashRankReranker(BaseReranker):
                 if hasattr(original_chunk, "model_copy")
                 else original_chunk
             )
-            updated_chunk.score = result["score"]
+            updated_chunk.score =float( result["score"])
 
             reranked_chunks.append(updated_chunk)
 
