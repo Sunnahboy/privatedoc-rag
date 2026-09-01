@@ -36,6 +36,8 @@ dependencies = [
     "docling",
     "langchain-text-splitters>=1.1.2",
     "bitsandbytes>=0.46.1",
+    "sse-starlette>=3.4.8",
+    "redis>=8.1.0",
 ]
 [tool.setuptools.packages.find]
 exclude = ["alembic*"]
