@@ -1,60 +1,29 @@
-from typing import Annotated, AsyncGenerator,List
-from app.pipeline.retrieval.multimodal_retriever import MultimodalRetriever
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.pipeline.retrieval.bm25_retriever import BM25Retriever
-from app.pipeline.retrieval.hybrid_retriever import HybridRetriever
-from app.database import get_db
-from app.orchestration.rag_pipeline import RAGPipeline
-from app.schemas.rag_schema import AskRequest, AskResponse, CitationResponse
-from app.services import document_service
-from app.pipeline.retrieval.multimodal_pipeline import MultimodalRetrievalPipeline
-from app.schemas.rag_schema import AskRequest, AskResponse, CitationResponse
-from app.services import document_service
-from app.pipeline.retrieval.qdrant_retriever import QdrantRetriever
-from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
-from app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
-from qdrant_client import AsyncQdrantClient
-from app.config import settings
-import uuid
-from sqlalchemy import select, desc
-from app.models.chat import ChatSession, ChatMessage
 import json
-from fastapi import Request
-from fastapi.responses import StreamingResponse
+import uuid
+import asyncio
+import logging
+import redis.asyncio as redis
+import logging
+from typing import Annotated, List
+from app.database import AsyncSessionLocal
+from fastapi import APIRouter, Depends, HTTPException, status,Request
+from sse_starlette.sse import EventSourceResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
+
+from app.database import get_db
+from app.schemas.rag_schema import AskRequest
+from app.services import document_service
+from app.models.chat import ChatSession, ChatMessage
+from app.config import settings
+from app.messaging.publisher import publish_chat_job
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/rag",
     tags=["RAG"],
 )
-
-
-async def get_pipeline() -> AsyncGenerator[RAGPipeline, None]:
-    """Instatiate the pipeline with multimodel capabilities and ensures cleaneup."""
-    base_retriever = HybridRetriever(
-        dense=QdrantRetriever(),
-        sparse=BM25Retriever(),
-    )
-    qdrant_client = AsyncQdrantClient(url=settings.qdrant_url) 
-    visual_engine = VisualRetrieverEngine()
-    #Instantiate the actual Multimodal Retriever
-    multi_retriever = MultimodalRetriever(
-        qdrant_client=qdrant_client,
-        text_retriever=base_retriever,
-        visual_engine=visual_engine
-    )
-
-    # Pass base_retriever into MultimodalRetrievalPipeline
-    multimodal = MultimodalRetrievalPipeline(retriever=multi_retriever)
-
-    #Instantiate RAGPipeline with both
-    pipeline = RAGPipeline(
-        retriever=base_retriever,
-        multimodal_pipeline=multimodal,
-    )
-    try:
-        yield pipeline
-    finally:
-        await pipeline.close()
 
 async def get_or_create_session(session_id: str | None, db: AsyncSession, title_fallback: str) -> str:
     """Finds existing session or creates a new one."""
@@ -72,26 +41,29 @@ async def get_or_create_session(session_id: str | None, db: AsyncSession, title_
 
 async def fetch_sliding_window_history(session_id: str, db: AsyncSession, limit: int = 4) -> List[ChatMessage]:
     """Fetches the last N messages to prevent LLM context overflow."""
+    # BUG FIX: order by `seq` (stable insertion order), not `created_at`,
+    # since user/assistant pairs can share an identical timestamp - see
+    # the note in chat.py's get_recent_messages for full details.
     stmt = (
         select(ChatMessage)
         .filter(ChatMessage.session_id == session_id)
-        .order_by(desc(ChatMessage.created_at))
+        .order_by(desc(ChatMessage.seq))
         .limit(limit)
     )
     result = await db.execute(stmt)
     messages = result.scalars().all()
     return list(reversed(messages))
 
-
-@router.post("/ask")
-async def ask(
-    request: Request,           
+#producer (fire and forget)
+@router.post("/ask", status_code=status.HTTP_202_ACCEPTED)
+async def ask(           
     payload: AskRequest,
-    pipeline: Annotated[RAGPipeline, Depends(get_pipeline)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """The API doorway to  RAG pipeline it validates the request,
-    uses Server-Sent Events (SSE) to stream tokens in real-time."""
+    """
+    Instantly saves the question, creates a placeholder for the answer, 
+    publishes to RabbitMQ, and returns the message IDs.
+    """
 
     if payload.document_id:
         document = await document_service.get_document_by_id(
@@ -104,83 +76,164 @@ async def ask(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Document '{payload.document_id}' not found.",
             )
-            # Resolve the Chat Session
+     # Resolve the Chat Session
     active_session_id = await get_or_create_session(
         session_id=payload.session_id,
         db=db,
         title_fallback=payload.question
     )
 
-    # Grab the Sliding Window History
-    recent_history = await fetch_sliding_window_history(active_session_id, db)
-
     # Save the User's Question instantly
+    user_msg_id = str(uuid.uuid4())
     user_msg = ChatMessage(
-        id=str(uuid.uuid4()),
+        id=user_msg_id,
         session_id=active_session_id,
         role="user",
         content=payload.question,
         citations=[]
     )
     db.add(user_msg)
+
+    
+    #ID so the frontend can listen for THIS specific message's tokens
+    assistant_msg_id = str(uuid.uuid4())
+    assistant_msg = ChatMessage(
+        id=assistant_msg_id,
+        session_id=active_session_id,
+        role="assistant",
+        content="", 
+        citations=[],
+        status="queued",
+    )
+    db.add(assistant_msg)
+    
     await db.commit()
 
+    #Hand the heavy work off to the ChatWorker running in a background process
+    #Publish to RabbitMQ
+    await publish_chat_job(
+        message_id=assistant_msg_id,
+        session_id=active_session_id,
+        question=payload.question,
+        document_id=payload.document_id
+    )
 
-    #Define the Async Generator for SSE
+    #Return instantly. 
+    return {
+        "session_id": active_session_id,
+        "user_message_id": user_msg_id,
+        "assistant_message_id": assistant_msg_id
+    }
+
+
+# Initialize Valkey/Redis client pool (using the standard redis-py async client)
+valkey_client = redis.from_url(
+    settings.valkey_url, 
+    decode_responses=True, 
+    socket_timeout=None,          # Prevents read timeouts during XREAD block=5000
+    socket_connect_timeout=5.0  
+  )  # Fails fast only if Valkey container is entirely down
+# app/api/rag_router.py
+
+# app/api/rag_router.py
+
+@router.get("/stream/{message_id}")
+async def stream_chat(message_id: str, request: Request, last_offset: str = "0"):
+    stream_key = f"chat:stream:{message_id}"
+
+    # THE FIX: Reconnects (hard refresh / tab switch / EventSource auto-retry)
+    # now ALWAYS replay the stream from the very beginning ("0"), regardless of
+    # what offset the client thinks it's at. Valkey keeps the full history for
+    # 10 minutes (see Chatworker.py), and it's only a handful of small JSON
+    # events, so there's no need for a fragile client-tracked offset. This
+    # guarantees the UI can always deterministically reconstruct the exact
+    # status message and any partial tokens generated so far, instead of
+    # depending on `localStorage`/`Last-Event-ID` bookkeeping that can get out
+    # of sync (or poisoned) across remounts.
+
     async def event_generator():
-        # Send the session_id immediately so the frontend knows it
-        yield f"data: {json.dumps({'type': 'session', 'session_id': active_session_id})}\n\n"
+        current_offset = "0"
 
-        full_text = ""
-        final_citations = []
+        # PHASE 0: WAIT FOR RETRIEVAL 
+        while True:
+            async with AsyncSessionLocal() as db:
+                stmt = select(ChatMessage).filter(ChatMessage.id == message_id)
+                result = await db.execute(stmt)
+                msg = result.scalar_one_or_none()
+                
+                if not msg:
+                    yield {"event": "message", "data": json.dumps({"type": "error", "error": "Message not found."})}
+                    return
+                
+                if msg.status == "completed":
+                    citations = json.loads(msg.citations) if isinstance(msg.citations, str) else (msg.citations or [])
+                    if msg.content:
+                        yield {"event": "message", "data": json.dumps({"type": "token", "content": msg.content})}
+                    yield {"event": "message", "data": json.dumps({"type": "done", "citations": citations})}
+                    return
+                    
+                if msg.status == "failed":
+                    yield {"event": "message", "data": json.dumps({"type": "error", "error": "Generation failed."})}
+                    return
+
+            exists = await valkey_client.exists(stream_key)
+            if exists:
+                break
+            
+            yield {"event": "message", "data": json.dumps({"type": "status", "message": "Initializing worker..."})}
+            await asyncio.sleep(2.0)
 
         try:
-            async for chunk in pipeline.ask_stream(
-                question=payload.question,
-                document_id=payload.document_id,
-                chat_history=recent_history,
-            ):
-                # Detect if the frontend hit "Stop" or the user closed the tab
-                if await request.is_disconnected():
-                    print("Client disconnected! Aborting stream.")
-                    break
-
-                # Send the chunk to the frontend
-                yield f"data: {json.dumps(chunk)}\n\n"
-
-                # Keep track of text and citations so  can save to DB
-                chunk_type = chunk.get("type")
-                if chunk_type == "token":
-                    full_text += chunk.get("content", "")
-                elif chunk_type == "done":
-                    final_citations = chunk.get("citations", [])
-                    
-        except Exception as e:
-            # Send error cleanly down the stream
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-            return
+            # PHASE 1: FULL REPLAY
+            # Always dump the entire buffered history (every status + token
+            # event emitted so far) so a freshly (re)mounted React tree can
+            # rebuild the exact UI state in one shot.
+            historical = await valkey_client.xrange(stream_key, min="0", max="+")
             
-        # Save the completed Assistant message to PostgreSQL
-        formatted_citations = [
-            {
-                "document_id": c.get("document_id", payload.document_id),
-                "chunk_index": c.get("chunk_index"),
-                "text": c.get("text"),
-                "score": float(c.get("score", 0.0))
-            } for c in final_citations
-        ]
+            for msg_id, fields in historical:
+                current_offset = msg_id
+                yield {"event": "message", "id": msg_id, "data": fields["payload"]}
+                
+                payload_dict = json.loads(fields["payload"])
+                if payload_dict.get("type") in ("done", "error"):
+                    return
 
-        assistant_msg = ChatMessage(
-            id=str(uuid.uuid4()),
-            session_id=active_session_id,
-            role="assistant",
-            content=full_text,
-            citations=formatted_citations
-        )
-        db.add(assistant_msg)
-        await db.commit()
+            # PHASE 2: LIVE TAILING
+            while True:
+                streams = await valkey_client.xread(
+                    {stream_key: current_offset}, count=10, block=5000
+                )
+                
+                if streams:
+                    for _, messages in streams:
+                        for msg_id, fields in messages:
+                            current_offset = msg_id
+                            yield {"event": "message", "id": msg_id, "data": fields["payload"]}
+                            
+                            payload_dict = json.loads(fields["payload"])
+                            if payload_dict.get("type") in ("done", "error"):
+                                return
+                else:
+                    async with AsyncSessionLocal() as db:
+                        stmt = select(ChatMessage).filter(ChatMessage.id == message_id)
+                        result = await db.execute(stmt)
+                        msg = result.scalar_one_or_none()
+                        
+                        if msg and msg.status == "completed":
+                            citations = json.loads(msg.citations) if isinstance(msg.citations, str) else (msg.citations or [])
+                            done_payload = json.dumps({"type": "done", "citations": citations})
+                            yield {"event": "message", "id": current_offset, "data": done_payload}
+                            return
+                        elif msg and msg.status == "failed":
+                            error_payload = json.dumps({"type": "error", "error": "Worker crashed."})
+                            yield {"event": "message", "id": current_offset, "data": error_payload}
+                            return
 
-    # 5. Return the Streaming Response using the SSE media type
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+                    ping = json.dumps({"type": "ping", "message": "still thinking..."})
+                    yield {"event": "message", "id": current_offset, "data": ping}
 
+        finally:
+            pass
+
+    return EventSourceResponse(event_generator())
     
