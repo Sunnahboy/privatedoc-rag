@@ -6,6 +6,11 @@ class ChatMessageBase(BaseModel):
     role: str
     content: str
     citations: Optional[List[Any]] = []
+    # THE FIX: status was missing here, so every /messages response silently
+    # dropped it. The frontend's reconnect-on-mount logic depends on knowing
+    # whether the last assistant message is still "queued"/"processing" -
+    # without this field it always looked "completed" and never reconnected.
+    status: Optional[str] = "completed"
 
 class ChatMessageResponse(ChatMessageBase):
     id: str

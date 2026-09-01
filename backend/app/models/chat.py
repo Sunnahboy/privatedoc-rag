@@ -1,5 +1,5 @@
 # app/models/chat.py
-from sqlalchemy import Column, String, DateTime, JSON, Text, ForeignKey
+from sqlalchemy import Column, String, DateTime, JSON, Text, ForeignKey, Integer, Sequence
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -21,4 +21,16 @@ class ChatMessage(Base):
     # Store which chunks/images the LLM used to answer this specific message
     citations = Column(JSON, default=[]) 
     
+    #track rabbitMQ worker
+    status = Column(String, default="completed", nullable=False)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # BUG FIX: user/assistant message pairs are inserted in the same commit and
+    # can end up with an identical `created_at` timestamp (same transaction
+    # time). Ordering solely by `created_at` is then non-deterministic and
+    # Postgres can occasionally return the assistant reply BEFORE its own
+    # user question, which silently misplaces the message in the UI and
+    # looks exactly like a "blank/missing assistant bubble" bug. A DB-assigned
+    # autoincrementing sequence column guarantees stable insertion-order
+    # sorting regardless of timestamp collisions.
+    seq = Column(Integer, Sequence("chat_messages_seq"), unique=True, nullable=True)
