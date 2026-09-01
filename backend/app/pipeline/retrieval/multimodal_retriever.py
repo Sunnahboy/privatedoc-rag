@@ -3,7 +3,6 @@ import logging
 from typing import Any
 
 from app.config import settings
-from app.pipeline.embeddings.base import BaseEmbedder
 from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
 from qdrant_client import AsyncQdrantClient, models
 from app.pipeline.retrieval.hybrid_retriever import HybridRetriever
