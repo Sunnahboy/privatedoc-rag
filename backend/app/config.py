@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     DLX_EXCHANGE_NAME: str = "ingestion.dlx"
     INGESTION_QUEUE_NAME: str = "document.ingest.queue"
     INGESTION_ROUTING_KEY: str = "document.ingest"
+    # RabbitMQ Chat Topology
+    CHAT_EXCHANGE_NAME: str = "chat.exchange"
+    CHAT_ROUTING_KEY: str = "chat.generate"
+    CHAT_QUEUE_NAME: str = "chat.generation.queue"
+
+    valkey_url: str = "redis://localhost:6379/0"
     # Worker Settings
     MAX_RETRIES: int = 3  # worker
     prefetch_count: int = 1
