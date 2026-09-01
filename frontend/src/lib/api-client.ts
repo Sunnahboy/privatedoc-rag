@@ -56,12 +56,18 @@ export interface ChatMessage {
     content: string;
     citations: Citation[];
     created_at: string;
+    status?: string;}//track message status
+// new POST response
+export interface ChatJobResponse {
+    session_id: string;
+    user_message_id: string;
+    assistant_message_id: string;
 }
 
 // Stream chunk event types matching our SSE backend
 export type StreamChunk =
     | { type: "session"; session_id: string }
-    | { type: "status"; stage: "retrieval" | "generation"; message: string }
+    | { type: "status"; stage?: "retrieval" | "generation"; message: string }
     | { type: "token"; content: string }
     | { type: "done"; citations: Citation[]; prompt_tokens?: number; completion_tokens?: number; prompt_chars?: number }
     | { type: "error"; error: string };
@@ -92,18 +98,17 @@ export const apiClient = {
     },
 
     /**
-     * Sends a RAG query to the backend and streams the response via SSE.
+     * The Producer (Fire and Forget)
+     * Submits the query to the backend, which instantly returns DB records and queues the worker.
      */
-    async askQuestionStream(
+    async submitChatJob(
         query: string,
-        documentIds?: string[],
-        sessionId?: string | null,
-        onChunk?: (chunk: StreamChunk) => void,
-        signal?: AbortSignal
-    ): Promise<void> {
+        documentId?: string,
+        sessionId?: string | null
+    ): Promise<ChatJobResponse> {
         const payload = {
             question: query,
-            document_id: documentIds && documentIds.length > 0 ? documentIds[0] : null,
+            document_id: documentId || null,
             session_id: sessionId || null,
         };
 
@@ -113,66 +118,69 @@ export const apiClient = {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify(payload),
-            signal,
-        });
-
-        if (!response.ok || !response.body) {
-            throw new Error(`Failed to start stream: ${response.status}`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-        let buffer = "";
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const parts = buffer.split("\n\n");
-            buffer = parts.pop() || "";
-
-            for (const part of parts) {
-                const trimmed = part.trim();
-                if (trimmed.startsWith("data: ")) {
-                    const jsonStr = trimmed.replace("data: ", "").trim();
-                    try {
-                        const parsed: StreamChunk = JSON.parse(jsonStr);
-                        if (onChunk) {
-                            onChunk(parsed);
-                        }
-                    } catch (e) {
-                        console.error("Failed to parse SSE line:", jsonStr, e);
-                    }
-                }
-            }
-        }
-    },
-
-    /**
-     * Non-streaming fallback if needed
-     */
-    async askQuestion(query: string, documentIds?: string[], sessionId?: string | null, signal?: AbortSignal): Promise<RagResponse> {
-        const payload = {
-            question: query,
-            document_id: documentIds && documentIds.length > 0 ? documentIds[0] : null,
-            session_id: sessionId || null,
-        };
-
-        const response = await fetch(`${API_BASE_URL}/rag/ask`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-            signal,
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to generate answer: ${response.status}`);
+            throw new Error(`Failed to submit chat job: ${response.status}`);
         }
 
         return response.json();
+    },
+
+    // src/lib/api-client.ts
+
+    async streamChatResponse(
+        assistantMessageId: string,
+        onChunk: (chunk: StreamChunk) => void,
+        signal?: AbortSignal,
+        onReplayStart?: () => void
+    ): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            if (signal && signal.aborted) {
+                return reject(new DOMException("Aborted", "AbortError"));
+            }
+
+            // THE FIX: The backend now always replays the full buffered
+            // history from the start on every (re)connect, so we no longer
+            // track/send a fragile last_offset via localStorage.
+            const url = `${API_BASE_URL}/rag/stream/${assistantMessageId}`;
+            const eventSource = new EventSource(url);
+
+            if (signal) {
+                signal.addEventListener("abort", () => {
+                    eventSource.close();
+                    reject(new DOMException("Aborted", "AbortError"));
+                });
+            }
+
+            // THE FIX: Every (re)connection - including the browser's native
+            // auto-reconnect after a dropped connection - triggers a full
+            // replay from offset 0. Without resetting local accumulator
+            // state here, reconnects would duplicate already-appended
+            // tokens. onReplayStart lets the caller reset its buffer right
+            // before the replayed events start arriving.
+            eventSource.onopen = () => {
+                onReplayStart?.();
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    onChunk(data);
+
+                    if (data.type === "done" || data.type === "error") {
+                        eventSource.close();
+                        resolve();
+                    }
+                } catch (err) {
+                    console.error("Failed to parse SSE chunk", err);
+                }
+            };
+
+            eventSource.onerror = (err) => {
+                console.warn("SSE Connection issue. Browser will attempt to reconnect natively...", err);
+            };
+        });
     },
 
     async listDocuments(): Promise<DocumentListItem[]> {
