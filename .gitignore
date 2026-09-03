@@ -24,7 +24,10 @@ data/
 # IDE
 .vscode/
 .idea/
-
+# Model weights and cache
+models/
+*.safetensors
+*.bin
 # OS
 .DS_Store
 Thumbs.db

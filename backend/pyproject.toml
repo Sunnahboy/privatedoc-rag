@@ -38,6 +38,7 @@ dependencies = [
     "bitsandbytes>=0.46.1",
     "sse-starlette>=3.4.8",
     "redis>=8.1.0",
+    "fastembed>=0.8.0",
 ]
 [tool.setuptools.packages.find]
 exclude = ["alembic*"]
