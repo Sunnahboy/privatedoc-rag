@@ -25,11 +25,12 @@ import {
   type ReaderTocItem,
 } from "@/components/documents/reader/readerModel";
 import { API_BASE_URL } from "@/lib/constants";
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 
 const PDFViewer = dynamic(() => import("@/components/documents/PDFViewer"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full min-h-[60vh] items-center justify-center bg-[#F4F1EA] text-on-surface-variant">
+    <div className="flex h-full min-h-[60vh] items-center justify-center bg-background text-on-surface-variant">
       Preparing reader…
     </div>
   ),
@@ -127,10 +128,10 @@ function PanelButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+      className={`inline-flex h-9 items-center gap-1.5 border-0 px-2.5 text-xs transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
         active
           ? "border-primary/30 bg-primary/10 text-primary"
-          : "border-outline-variant/30 bg-white text-on-surface hover:bg-surface"
+          : "border-outline-variant/30 bg-surface-elevated text-on-surface hover:bg-surface"
       }`}
     >
       <span className="material-symbols-outlined text-[18px]">{icon}</span>
@@ -332,7 +333,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
 
   if (loadState === "loading") {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#F4F1EA] px-6 text-center text-on-surface">
+      <div className="flex h-screen items-center justify-center bg-background px-6 text-center text-on-surface">
         <div>
           <p className="text-lg font-medium">Opening workspace…</p>
           <p className="mt-2 text-sm text-on-surface-variant">
@@ -345,8 +346,8 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
 
   if (loadState === "error" || !doc) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#F4F1EA] px-6">
-        <div className="max-w-md rounded-2xl border border-outline-variant/30 bg-white p-6 text-center shadow-sm">
+      <div className="flex h-screen items-center justify-center bg-background px-6">
+        <div className="max-w-md rounded-2xl border border-outline-variant/30 bg-surface-elevated p-6 text-center shadow-sm">
           <p className="text-lg font-medium text-on-surface">Unable to open this document.</p>
           <p className="mt-2 text-sm text-on-surface-variant">
             {loadError ?? "The document may be unavailable or the server may not be responding."}
@@ -364,22 +365,29 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
   }
 
   const isFocusMode = readingMode === "focus";
-  const isStudyMode = readingMode === "study";
+  const isChatFocus = readingMode === "study";
   // Modes affect visibility, never the user's saved panel dimensions or preferences.
   const effectiveTocOpen = !isFocusMode && isTocOpen;
-  const effectiveAiOpen = !isFocusMode && isAiOpen;
+  const effectiveAiOpen = !isFocusMode && (isChatFocus || isAiOpen);
   const tocPanelClass = isFocusMode || !effectiveTocOpen ? "-translate-x-full" : "translate-x-0";
   const aiPanelClass = isFocusMode || !effectiveAiOpen ? "translate-x-full" : "translate-x-0 w-full sm:w-96";
-  const chatPanelWidth = isStudyMode ? "50vw" : `${isRagExpanded ? CHAT_WIDTH.max : layout.chatWidth}px`;
+  const chatPanelWidth = isChatFocus ? "100vw" : `${isRagExpanded ? CHAT_WIDTH.max : layout.chatWidth}px`;
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-[#F4F1EA] text-on-surface antialiased">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-on-surface antialiased">
       {!isFocusMode && (
         <header
           style={{ height: layout.headerHeight }}
-          className={`relative z-40 shrink-0 overflow-hidden border-b border-outline-variant/20 bg-[#F7F5EF] transition-[height] duration-200 ${resizeTarget === "header" ? "transition-none! select-none" : ""}`}
+          className={`relative z-40 shrink-0 overflow-hidden border-b border-outline-variant/20 bg-surface transition-[height] duration-200 ${resizeTarget === "header" ? "transition-none! select-none" : ""}`}
         >
-          <div className="flex h-full items-center justify-between gap-3 px-4 md:px-6">
+          <div className="grid h-full grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 md:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <PanelButton
+              label={isTocOpen ? "Hide contents" : "Show contents"}
+              icon="menu_book"
+              active={effectiveTocOpen}
+              onClick={() => setIsTocOpen((current) => !current)}
+            />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold md:text-base">
               <Link href="/library" className="mr-2 text-on-surface-variant hover:text-primary">
@@ -393,40 +401,36 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
                 : `Page ${currentPage}${doc.total_pages ? ` of ${doc.total_pages}` : ""}`}
             </p>
           </div>
+          </div>
 
-          <div className="hidden items-center gap-2 lg:flex">
+          <div className="hidden items-center gap-0 overflow-hidden rounded-lg border border-outline-variant/30 bg-surface-elevated shadow-sm lg:flex">
             <PanelButton
-              label="Normal"
+              label="Full View"
               icon="import_contacts"
               active={readingMode === "normal"}
               onClick={() => applyReadingMode("normal")}
             />
             <PanelButton
-              label="Focus"
+              label="Document Focus"
               icon="center_focus_strong"
               onClick={() => applyReadingMode("focus")}
             />
             <PanelButton
-              label="Study"
+              label="Chat Focus"
               icon="auto_stories"
               active={readingMode === "study"}
               onClick={() => applyReadingMode("study")}
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <PanelButton
-              label={isTocOpen ? "Hide contents" : "Show contents"}
-              icon="menu_book"
-              active={effectiveTocOpen}
-              onClick={() => setIsTocOpen((current) => !current)}
-            />
+          <div className="flex items-center justify-end gap-2">
             <PanelButton
               label={isAiOpen ? "Hide RAG Chat" : "Show RAG Chat"}
               icon="storage"
               active={effectiveAiOpen}
               onClick={() => setIsAiOpen((current) => !current)}
             />
+            <ThemeSwitcher />
           </div>
           </div>
           <button
@@ -467,7 +471,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
           <aside
             style={{ "--toc-width": `${layout.tocWidth}px`, "--reader-header-height": `${layout.headerHeight}px` } as CSSProperties}
             className={`fixed bottom-0 left-0 top-var(--reader-header-height) z-30 w-80 min-w-0 overflow-y-auto border-r border-outline-variant/20
-               bg-[#F7F5EF] transition-all duration-300 md:relative md:top-auto md:z-0 ${effectiveTocOpen ? "md:w-(--toc-width) md:border-r" : "md:w-0 md:border-r-0"} 
+               bg-surface transition-all duration-300 md:relative md:top-auto md:z-0 ${effectiveTocOpen ? "md:w-(--toc-width) md:border-r" : "md:w-0 md:border-r-0"}
                ${resizeTarget === "toc" ? "md:transition-none! md:select-none" : ""} ${tocPanelClass}`}
           >
           <div className="p-4">
@@ -482,7 +486,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
 
             <nav className="flex flex-col gap-0.5 pb-10" aria-label="Table of contents">
               {tocResult.parseError ? (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <div className="rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
                   Error loading TOC structure.
                 </div>
               ) : tocItems.length === 0 ? (
@@ -543,7 +547,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
           </aside>
         )}
 
-        <main className="min-w-0 flex-1 overflow-hidden">
+        <main className={`overflow-hidden transition-[width,opacity] duration-300 ${isChatFocus ? "pointer-events-none w-0 flex-none opacity-0" : "min-w-0 flex-1 opacity-100"}`}>
           <PDFViewer
             fileUrl={fileUrl}
             pageNumber={currentPage}
@@ -563,7 +567,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
         {!isFocusMode && (
           <aside
             style={{ "--chat-width": chatPanelWidth, "--reader-header-height": `${layout.headerHeight}px` } as CSSProperties}
-            className={`fixed bottom-0 right-0 top-var(--reader-header-height) z-30 w-96 min-w-0 overflow-hidden border-l border-outline-variant/20 bg-white transition-all duration-300 xl:relative xl:top-auto xl:z-0 ${effectiveAiOpen ? "xl:w-(--chat-width) xl:border-l" : "xl:w-0 xl:border-l-0"} ${resizeTarget === "chat" ? "xl:transition-none! xl:select-none" : ""} ${aiPanelClass}`}
+            className={`fixed bottom-0 right-0 top-var(--reader-header-height) z-30 w-96 min-w-0 overflow-hidden border-l border-outline-variant/20 bg-surface transition-all duration-300 xl:relative xl:top-auto xl:z-0 ${effectiveAiOpen ? "xl:w-(--chat-width) xl:border-l" : "xl:w-0 xl:border-l-0"} ${resizeTarget === "chat" ? "xl:transition-none! xl:select-none" : ""} ${aiPanelClass}`}
           >
             {effectiveAiOpen && (
               <button type="button" aria-label="Resize RAG Chat" title="Resize RAG Chat" onPointerDown={(event) => startResize("chat", event)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onKeyDown={(event) => resizeWithKeyboard("chat", event)} className="reader-resize-handle reader-resize-handle-col absolute inset-y-0 left-0 z-40 hidden w-3 cursor-col-resize touch-none xl:block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"><span aria-hidden="true" /></button>
@@ -574,6 +578,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
               showDocumentSelector={true}
               isExpanded={isRagExpanded}
               onToggleExpanded={() => setIsRagExpanded((current) => !current)}
+              chatFocus={isChatFocus}
               className="h-full rounded-none border-0"
             />
           </aside>
@@ -582,7 +587,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
 
       {!isFocusMode && (
         <div className="fixed inset-x-4 bottom-4 z-40 md:hidden">
-          <div className="mx-auto flex max-w-sm items-center justify-between rounded-full border border-outline-variant/20 bg-white px-3 py-2 shadow-lg">
+          <div className="mx-auto flex max-w-sm items-center justify-between rounded-full border border-outline-variant/20 bg-surface-elevated px-3 py-2 shadow-lg">
             <button
               type="button"
               onClick={() => setIsTocOpen(true)}

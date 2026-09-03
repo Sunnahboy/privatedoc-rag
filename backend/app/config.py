@@ -37,10 +37,16 @@ class Settings(BaseSettings):
     DLX_EXCHANGE_NAME: str = "ingestion.dlx"
     INGESTION_QUEUE_NAME: str = "document.ingest.queue"
     INGESTION_ROUTING_KEY: str = "document.ingest"
+    # RabbitMQ Chat Topology
+    CHAT_EXCHANGE_NAME: str = "chat.exchange.v2"
+    CHAT_ROUTING_KEY: str = "chat.generate.v2"
+    CHAT_QUEUE_NAME: str = "chat.generation.queue.v2"
+
+    valkey_url: str = "redis://localhost:6379/0"
     # Worker Settings
     MAX_RETRIES: int = 3  # worker
     prefetch_count: int = 1
-    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/?heartbeat=0"
     rabbitmq_connection_timeout: int = 10
     rabbitmq_channel_pool_size: int = 10
 
@@ -50,8 +56,11 @@ class Settings(BaseSettings):
     # Retrieval & Reranker settings
     rrf_k: int = 60
     top_k_reranker: int = 5
-    reranker_model: str = "ms-marco-MiniLM-L-12-v2"
+    reranker_model: str = "ms-marco-TinyBERT-L-2-v2"
     reranker_enabled: bool = True
+    reranker_cache_dir: str = "./models/flashrank"
+    reranker_max_candidates: int = 25
+    reranker_max_chars: int = 1500
 
     # RAG services (Qdrant & Ollama)
     qdrant_url: str = "http://localhost:7000"
@@ -59,9 +68,12 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = "documents"
 
     ollama_url: str = "http://localhost:11434"
-    embedding_provider: str = "ollama"
-    embedding_model: str = "qwen3-embedding:0.6b"
-    embedding_dimensions: int = 1024
+    #embedding_provider: str = "ollama"
+    embedding_provider:str="fastembed"
+    #embedding_model: str = "qwen3-embedding:0.6b"
+    embedding_model:str = "BAAI/bge-small-en-v1.5"
+    #embedding_dimensions: int = 1024
+    embedding_dimensions: int = 384
     embedding_timeout: int = 120
     embedding_max_concurrency: int = 1
     embedding_batch_size: int = 16

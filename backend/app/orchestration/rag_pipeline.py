@@ -132,7 +132,7 @@ class RAGPipeline(BaseRAGPipeline):
     async def ask_stream(
         self,
         question: str,
-        document_id: str | None = None,
+        document_ids: list[str],
         chat_history: list[ChatMessage] | None = None,
     ) -> AsyncGenerator[dict, None]:
         
@@ -149,10 +149,15 @@ class RAGPipeline(BaseRAGPipeline):
         }
 
         with profile("Retrieval"):
-            if self.multimodal_pipeline and document_id:
+            # Prevent context dilution and protect the CPU reranker
+            base_k = 15
+            dynamic_top_k = min(base_k + max(0, len(document_ids) - 1) * 5, 40)
+            if self.multimodal_pipeline and document_ids:
                 multimodal_result = await self.multimodal_pipeline.search(
                     query=question,
-                    document_id=document_id,
+                    document_ids=document_ids,
+                    text_top_k=dynamic_top_k,
+                    final_top_k=8,
                 )
                 dense_count = multimodal_result.dense_hits
                 sparse_count = multimodal_result.sparse_hits
@@ -178,24 +183,33 @@ class RAGPipeline(BaseRAGPipeline):
                         "message": f"Extracting {visual_count} relevant visual pages..."
                     }
                     
-                    pdf_path = Path(settings.upload_dir) / f"{document_id}.pdf"
+                    pdf_path = Path(settings.upload_dir) / f"{document_ids}.pdf"
                     if pdf_path.exists():
                         with fitz.open(pdf_path) as doc:
                             for vp in multimodal_result.visual_pages:
-                                page_num = vp["page_number"]
-                                page = doc[page_num - 1] 
-                                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+                                # Safely extract the origin document for THIS specific image
+                                origin_doc_id = vp.get("document_id") or document_ids[0]
+                                pdf_path = Path(settings.upload_dir) / f"{origin_doc_id}.pdf"
                                 
-                                img = Image.frombytes(
-                                    "RGBA" if pix.alpha else "RGB", 
-                                    [pix.width, pix.height], 
-                                    pix.samples
-                                )
-                                rendered_images.append(img)
+                                if pdf_path.exists():
+                                    try:
+                                        with fitz.open(pdf_path) as doc:
+                                            page_num = vp["page_number"]
+                                            if 0 < page_num <= len(doc):
+                                                page = doc[page_num - 1] 
+                                                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+                                                img = Image.frombytes(
+                                                    "RGBA" if pix.alpha else "RGB", 
+                                                    [pix.width, pix.height], 
+                                                    pix.samples
+                                                )
+                                                rendered_images.append(img)
+                                    except Exception as e:
+                                        logger.error(f"Failed to render page {page_num} for doc {origin_doc_id}: {e}")
             else:
                 retrieved = await self.retriever.retrieve(
                     query=question,
-                    document_id=document_id,
+                    document_id=document_ids[0] if document_ids else None,
                 )
                 dense_count = retrieved.dense_hits
                 sparse_count = retrieved.sparse_hits

@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class AskRequest(BaseModel):
     question: str
-    document_id: str | None = None
+    document_ids: list[str] = []
     session_id: str | None = None
 
 

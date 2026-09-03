@@ -6,7 +6,7 @@ Generates late-interaction multi-vector embeddings for document pages.
 import logging
 from threading import Lock
 from typing import Any
-
+import os
 import numpy as np
 import torch
 
@@ -14,7 +14,7 @@ import torch
 from colpali_engine.models import ColQwen2, ColQwen2Processor
 from PIL import Image
 from transformers import BitsAndBytesConfig
-
+from huggingface_hub import snapshot_download
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +30,8 @@ class VisualRetrieverEngine:
 
     # We default to a 2B model which is realistic for local/self-hosted execution.
     # You can change this to "vidore/colpali-v1.2" for the 7B Llama vision variant.
-    MODEL_NAME = "vidore/colqwen2-v1.0"
+    LOCAL_MODEL_PATH = "./models/colqwen2-v1.0"
+    HUB_MODEL_NAME = "vidore/colqwen2-v1.0"
 
     @classmethod
     def _initialize_engine(cls) -> None:
@@ -55,14 +56,27 @@ class VisualRetrieverEngine:
 
                 cls._device = device
 
-                # 2. Load the Processor
-                logger.info(f"Loading processor for {cls.MODEL_NAME}...")
+                # THE FIX: Auto-Download Logic
+                # Check if the directory exists AND is not empty
+                if not os.path.exists(cls.LOCAL_MODEL_PATH) or not os.listdir(cls.LOCAL_MODEL_PATH):
+                    logger.warning(f"Model weights not found at {cls.LOCAL_MODEL_PATH}.")
+                    logger.info(f"Initiating auto-download from {cls.HUB_MODEL_NAME}. This will take a while...")
+                    os.makedirs(cls.LOCAL_MODEL_PATH, exist_ok=True)
+                    snapshot_download(
+                        repo_id=cls.HUB_MODEL_NAME, 
+                        local_dir=cls.LOCAL_MODEL_PATH,
+                        local_dir_use_symlinks=False # Forces actual files to be downloaded, not just cache pointers
+                    )
+                    logger.info("Download complete!")
+
+                # 2. Load the Processor from the local path
+                logger.info(f"Loading processor for {cls.LOCAL_MODEL_PATH}...")
                 cls._processor_instance = ColQwen2Processor.from_pretrained(
-                    cls.MODEL_NAME
+                    cls.LOCAL_MODEL_PATH
                 )
 
-                # 3. Load the model, using 4-bit quantization on NVIDIA GPUs.
-                logger.info(f"Loading model weights for {cls.MODEL_NAME}...")
+                # 3. Load the model from the local path
+                logger.info(f"Loading model weights for {cls.LOCAL_MODEL_PATH}...")
                 if cls._device.type == "cuda":
                     quantization_config = BitsAndBytesConfig(
                         load_in_4bit=True,
@@ -72,17 +86,18 @@ class VisualRetrieverEngine:
                         llm_int8_enable_fp32_cpu_offload=True
                     )
                     cls._model_instance = ColQwen2.from_pretrained(
-                        cls.MODEL_NAME,
+                        cls.LOCAL_MODEL_PATH,
                         quantization_config=quantization_config,
-                        device_map="auto",
+                        device_map={"": "cuda"}, # Bypass meta tensors
+                        local_files_only=True,
                     ).eval()
                     logger.info("Model loaded in 4-bit quantized mode.")
                 else:
-                    # bitsandbytes quantization is unsupported on MPS and CPU.
                     cls._model_instance = ColQwen2.from_pretrained(
-                        cls.MODEL_NAME,
+                        cls.LOCAL_MODEL_PATH,
                         torch_dtype=torch.bfloat16,
                         device_map=cls._device,
+                        local_files_only=True,
                     ).eval()
 
                 logger.info("Visual Retriever Engine loaded successfully.")

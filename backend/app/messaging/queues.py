@@ -31,11 +31,23 @@ async def setup_queues_and_bindings(
         arguments=queue_args,
     )
 
+    #chat generation queue
+    chat_queue = await channel.declare_queue(
+        name=settings.CHAT_QUEUE_NAME, 
+        durable=True,
+        arguments=queue_args, 
+    )
+    await chat_queue.bind(
+        exchange=exchanges["chat_exchange"], routing_key=settings.CHAT_ROUTING_KEY
+    )
+
     await main_queue.bind(
-        exchange=exchanges["doc_exchange"], routing_key=settings.INGESTION_ROUTING_KEY
+        exchange=exchanges["doc_exchange"], 
+        routing_key=settings.INGESTION_ROUTING_KEY
     )
 
     return {
         "main_queue": main_queue,
+        "chat_queue":chat_queue,
         "dlq": dlq,
     }

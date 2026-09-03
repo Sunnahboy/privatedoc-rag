@@ -1,10 +1,7 @@
-import asyncio
+
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-
-from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +15,7 @@ from app.api.chat import router as chat_router
 from app.qdrant import setup_qdrant_collections
 from app.utils.logging_utils import configure_logging
 from app.database import engine
+from app.messaging.queues import setup_queues_and_bindings
 configure_logging()
 logger = logging.getLogger(__name__)
 
@@ -32,13 +30,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Handles backend startup and shutdown tasks.
     """
     logger.info("starting %s v%s", settings.app_name, settings.app_version)
-   #Initialize Visual Engine & Qdrant Collections
-    VisualRetrieverEngine._initialize_engine()
-    # 2. Database initialization
+   
+    #Database initialization
     logger.info("Database initialized")
     await setup_qdrant_collections()  # check if 'documents_visual' exists,
     # Initialize RabbitMQ Manager so the channel pool is ready for publishers
+    logger.info("Initializing RabbitMQ connection pool...")
     await rabbitmq_manager.initialize()
+    # Set up the RabbitMQ topology (exchanges, queues, bindings)
+    logger.info("Setting up RabbitMQ topology...")
+    pool = rabbitmq_manager.get_channel_pool()
+    async with pool.acquire() as channel:
+        await setup_queues_and_bindings(channel)
+    logger.info("RabbitMQ topology setup complete.")
 
     yield
 
@@ -82,7 +86,6 @@ def root() -> dict:
     """
     Root endpoint.
 
-    this is not the main API.
     Simply confirms the backend is reachable
     """
     return {

@@ -2,13 +2,13 @@ import httpx
 import pytest
 from app.pipeline.embeddings.exception import EmbeddingResponseError
 from app.pipeline.embeddings.factory import create_embedder
+from app.pipeline.embeddings.fastembed_embedder import FastEmbedEmbedder
 from app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
-
 
 def test_factory_returns_ollama_embedder():
     embedder = create_embedder()
 
-    assert isinstance(embedder, OllamaEmbedder)
+    assert isinstance(embedder, FastEmbedEmbedder)
 
 
 def test_split_batches_uses_embedder_batch_size():

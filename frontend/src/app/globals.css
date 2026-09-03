@@ -1,31 +1,146 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f9f9ff;
+  --foreground: #121c2a;
+  --primary: #091426;
+  --on-primary: #ffffff;
+  --surface: #f9f9ff;
+  --surface-container: #e6eeff;
+  --surface-container-low: #eff3ff;
+  --surface-elevated: #ffffff;
+  --reader-surface: #f7f5ef;
+  --chat-surface: #fcfbf8;
+  --chat-focus: #f7f7f8;
+  --chat-input: #faf9f6;
+  --outline: #75777d;
+  --outline-variant: #c5c6cd;
+  --muted: #45474c;
+  --error: #ba1a1a;
+  --success: #166534;
+  --success-container: #dcfce7;
+  --warning: #92400e;
+  --warning-container: #fef3c7;
+}
+
+[data-theme="matcha"] {
+  --background: #f5f8f1;
+  --foreground: #182019;
+  --primary: #315b3b;
+  --on-primary: #ffffff;
+  --surface: #f8fbf5;
+  --surface-container: #e3eee0;
+  --surface-container-low: #edf5e9;
+  --surface-elevated: #ffffff;
+  --reader-surface: #f7f5ef;
+  --chat-surface: #fcfbf8;
+  --chat-focus: #f7f7f8;
+  --chat-input: #faf9f6;
+  --outline: #6d786b;
+  --outline-variant: #c4d0c0;
+  --muted: #485548;
+  --error: #a33b35;
+  --success: #315b3b;
+  --success-container: #dcebd8;
+  --warning: #7a5a24;
+  --warning-container: #f4e7c8;
+}
+
+[data-theme="dark"] {
+  --background: #111318;
+  --foreground: #e6e8ef;
+  --primary: #b7c9ff;
+  --on-primary: #1a2a4a;
+  --surface: #191b22;
+  --surface-container: #242832;
+  --surface-container-low: #1e222b;
+  --surface-elevated: #2b303b;
+  --reader-surface: #191b22;
+  --chat-surface: #191b22;
+  --chat-focus: #111318;
+  --chat-input: #242832;
+  --outline: #8d93a3;
+  --outline-variant: #414653;
+  --muted: #b9bfce;
+  --error: #ffb4ab;
+  --success: #9bd3a8;
+  --success-container: #17351f;
+  --warning: #f4c86a;
+  --warning-container: #3a2c0f;
+}
+
+[data-theme="oled"] {
+  --background: #000000;
+  --foreground: #f2f2f2;
+  --primary: #9db7ff;
+  --on-primary: #07122e;
+  --surface: #050505;
+  --surface-container: #141414;
+  --surface-container-low: #0b0b0b;
+  --surface-elevated: #1b1b1b;
+  --reader-surface: #000000;
+  --chat-surface: #000000;
+  --chat-focus: #000000;
+  --chat-input: #141414;
+  --outline: #a6a6a6;
+  --outline-variant: #454545;
+  --muted: #c6c6c6;
+  --error: #ffb4ab;
+  --success: #8fd6a0;
+  --success-container: #0e2013;
+  --warning: #e8c17a;
+  --warning-container: #241a08;
+}
+
+[data-theme="sepia"] {
+  --background: #f3e5c8;
+  --foreground: #3c2b1f;
+  --primary: #70451f;
+  --on-primary: #fff8e8;
+  --surface: #f7ecd5;
+  --surface-container: #e8d4ae;
+  --surface-container-low: #efdfbe;
+  --surface-elevated: #fff7e6;
+  --reader-surface: #f1dfbd;
+  --chat-surface: #f7ecd5;
+  --chat-focus: #f3e5c8;
+  --chat-input: #fff4dd;
+  --outline: #806b50;
+  --outline-variant: #c4aa80;
+  --muted: #5d4935;
+  --error: #9b2c24;
+  --success: #3d6b3a;
+  --success-container: #dcebd2;
+  --warning: #805b29;
+  --warning-container: #f3e2ba;
 }
 
 @theme inline {
   /* Colors */
-  --color-secondary: #5c5f60;
-  --color-on-primary: #ffffff;
+  --color-secondary: var(--muted);
+  --color-on-primary: var(--on-primary);
   --color-on-primary-fixed-variant: #3c475a;
   --color-on-primary-container: #8590a6;
   --color-on-secondary: #ffffff;
   --color-on-error: #ffffff;
-  --color-surface-container-low: #eff3ff;
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-reader-surface: var(--reader-surface);
+  --color-chat-surface: var(--chat-surface);
+  --color-chat-focus: var(--chat-focus);
+  --color-chat-input: var(--chat-input);
   --color-on-tertiary-fixed-variant: #44474a;
   --color-surface-dim: #d0daef;
-  --color-surface: #f9f9ff;
+  --color-surface: var(--surface);
   --color-on-secondary-container: #626566;
   --color-inverse-primary: #bcc7de;
   --color-on-error-container: #93000a;
   --color-surface-bright: #f9f9ff;
   --color-on-background: #121c2a;
-  --color-background: #f9f9ff;
+  --color-background: var(--background);
   --color-inverse-surface: #273140;
   --color-tertiary-container: #26292c;
-  --color-on-surface: #121c2a;
+  --color-on-surface: var(--foreground);
   --color-inverse-on-surface: #ebf1ff;
   --color-surface-tint: #545f73;
   --color-surface-container-highest: #d9e3f7;
@@ -34,25 +149,29 @@
   --color-primary-fixed-dim: #bcc7de;
   --color-surface-container-high: #dee9fd;
   --color-on-secondary-fixed-variant: #454748;
-  --color-outline: #75777d;
+  --color-outline: var(--outline);
   --color-tertiary-fixed-dim: #c4c7ca;
   --color-primary-container: #1e293b;
-  --color-error: #ba1a1a;
+  --color-error: var(--error);
+  --color-success: var(--success);
+  --color-success-container: var(--success-container);
+  --color-warning: var(--warning);
+  --color-warning-container: var(--warning-container);
   --color-on-tertiary-fixed: #191c1f;
   --color-primary-fixed: #d8e3fb;
   --color-surface-variant: #d9e3f7;
   --color-surface-container-lowest: #ffffff;
   --color-secondary-fixed-dim: #c5c7c8;
   --color-on-primary-fixed: #111c2d;
-  --color-surface-container: #e6eeff;
-  --color-on-surface-variant: #45474c;
+  --color-surface-container: var(--surface-container);
+  --color-on-surface-variant: var(--muted);
   --color-secondary-fixed: #e1e3e4;
   --color-on-tertiary-container: #8d9094;
   --color-on-secondary-fixed: #191c1d;
   --color-secondary-container: #e1e3e4;
   --color-on-tertiary: #ffffff;
-  --color-outline-variant: #c5c6cd;
-  --color-primary: #091426;
+  --color-outline-variant: var(--outline-variant);
+  --color-primary: var(--primary);
   --color-tertiary-fixed: #e0e2e6;
 
   /* Spacing */
@@ -102,17 +221,32 @@
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.theme-select {
+  color-scheme: light;
+}
+
+.theme-select option {
+  background: var(--surface-elevated);
+  color: var(--foreground);
+}
+
+[data-theme="dark"] .theme-select,
+[data-theme="oled"] .theme-select {
+  color-scheme: dark;
+}
+
+.pdf-viewer-shell {
+  background: var(--background);
+}
+
+[data-theme="dark"] .pdf-viewer-shell canvas {
+  filter: invert(90%) hue-rotate(180deg);
 }
 
 /* Resize affordances stay quiet until a reader boundary is approached. */

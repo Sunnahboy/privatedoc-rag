@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation"; 
 import { apiClient, RagResponse, ChatMessage, StreamChunk, Citation } from "@/lib/api-client";
 
 function isAbortError(error: unknown): boolean {
@@ -6,78 +7,121 @@ function isAbortError(error: unknown): boolean {
 }
 
 export function useRAGQuery() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  
+  const urlSessionId = searchParams.get("session_id");
+
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<RagResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Use a mutable ref to track the current sessionId during asynchronous stream loops
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
-  // Sync ref with state whenever sessionId updates
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
 
-  // Load persisted session and chat history from localStorage on mount.
   useEffect(() => {
-    const savedSessionId = localStorage.getItem("rag_session_id");
-    const savedHistory = localStorage.getItem("rag_chat_history");
-
-    if (savedSessionId) {
-      setSessionId(savedSessionId);
-    }
-
-    if (savedHistory) {
-      try {
-        const parsedHistory = JSON.parse(savedHistory) as ChatMessage[];
-        if (Array.isArray(parsedHistory)) {
-          setChatHistory(parsedHistory);
-        }
-      } catch (err) {
-        console.error("Failed to parse cached chat history:", err);
-        localStorage.removeItem("rag_chat_history");
+    if (urlSessionId) {
+      setSessionId(urlSessionId);
+      localStorage.setItem("rag_last_session_id", urlSessionId);
+    } else {
+      const savedId = localStorage.getItem("rag_last_session_id");
+      if (savedId) {
+        setSessionId(savedId);
+        const newParams = new URLSearchParams(searchParams.toString());
+        newParams.set("session_id", savedId);
+        router.replace(`${pathname}?${newParams.toString()}`);
       }
     }
-
-    if (savedSessionId) {
-      loadHistory(savedSessionId);
-    }
-  }, []);
+  }, [urlSessionId, pathname, router, searchParams]);
 
   useEffect(() => {
-    const serialized = JSON.stringify(chatHistory);
-    const stored = localStorage.getItem("rag_chat_history");
+    const abortController = new AbortController();
 
-    if (chatHistory.length > 0) {
-      if (stored !== serialized) {
-        localStorage.setItem("rag_chat_history", serialized);
-      }
-      return;
+    if (sessionId) {
+      loadHistory(sessionId, abortController.signal);
+    } else {
+      setChatHistory([]);
     }
 
-    if (stored) {
-      localStorage.removeItem("rag_chat_history");
-    }
-  }, [chatHistory]);
+    return () => {
+      abortController.abort();
+    };
+  }, [sessionId]);
 
-  const loadHistory = async (id: string) => {
+  const loadHistory = async (id: string, signal?: AbortSignal) => {
     try {
       const history = await apiClient.getChatHistory(id);
       setChatHistory(history);
+
+      const lastMessage = history[history.length - 1];
+
+      if (lastMessage && lastMessage.role === "assistant" && ["queued", "processing"].includes(lastMessage.status || "")) {
+          setIsLoading(true);
+          setStatusMessage("Reconnecting to stream...");
+
+          // THE FIX: The backend always replays the entire buffered history
+          // from scratch on every connect/reconnect. `streamedAnswer` is
+          // reset in `onReplayStart` (fired on every EventSource open,
+          // including native reconnects) so a resumed connection
+          // deterministically rebuilds the exact UI state - current status
+          // message and/or partial text - instead of ever rendering a blank
+          // bubble.
+          let streamedAnswer = "";
+
+          // Promise blocks here until the stream finishes naturally
+          await apiClient.streamChatResponse(
+            lastMessage.id,
+            (chunk: StreamChunk) => {
+               if (chunk.type === "status") {
+                  setStatusMessage(chunk.message);
+               } else if (chunk.type === "token") {
+                  streamedAnswer += chunk.content;
+                  // THE FIX: Do not wipe the status message until the LLM actually outputs a visible word!
+                  if (chunk.content.trim().length > 0) {
+                      setStatusMessage(null);
+                  }
+
+                  setChatHistory((prev) => prev.map((msg) => 
+                    msg.id === lastMessage.id ? { ...msg, content: streamedAnswer, status: "processing" } : msg
+                  ));
+               } else if (chunk.type === "done") {
+                  apiClient.getChatHistory(id).then((finalHistory) => {
+                      setChatHistory(finalHistory);
+                      setIsLoading(false);
+                  });
+               } else if (chunk.type === "error") {
+                  setError(chunk.error);
+                  setIsLoading(false);
+               }
+            },
+            signal,
+            () => {
+               // Reset accumulator right before the replayed events start.
+               streamedAnswer = "";
+               setStatusMessage("Reconnecting to stream...");
+               setChatHistory((prev) => prev.map((msg) =>
+                 msg.id === lastMessage.id ? { ...msg, content: "" } : msg
+               ));
+            }
+          );
+      }
     } catch (err) {
+      if (isAbortError(err)) return;
       console.error("Failed to load chat history:", err);
-      localStorage.removeItem("rag_session_id");
-      setSessionId(null);
     }
   };
 
   const askQuestion = async (
     e?: React.SyntheticEvent,
-    selectedDocIds?: string[],
+    documentIds: string[] = [],
     explicitQuery?: string,
     signal?: AbortSignal,
   ): Promise<RagResponse | null> => {
@@ -90,99 +134,88 @@ export function useRAGQuery() {
       setIsLoading(true);
       setError(null);
       setResponse(null); 
-      setStatusMessage("Initializing query...");
+      setStatusMessage("Queuing job...");
 
-      const docs = selectedDocIds && selectedDocIds.length > 0 ? selectedDocIds : undefined;
-      const tempAssistantMsgId = `temp-asst-${Date.now()}`;
-
-      // Capture snapshot of current session ID securely from the ref
       const currentSessionId = sessionIdRef.current;
+      
+      const { session_id, user_message_id, assistant_message_id } = await apiClient.submitChatJob(
+        q,
+        documentIds,
+        currentSessionId
+      );
+
+      if (!currentSessionId) {
+        setSessionId(session_id);
+        localStorage.setItem("rag_last_session_id", session_id);
+        const newParams = new URLSearchParams(searchParams.toString());
+        newParams.set("session_id", session_id);
+        router.replace(`${pathname}?${newParams.toString()}`);
+      }
 
       setChatHistory((prev) => [
         ...prev,
-        { 
-          id: tempAssistantMsgId, 
-          session_id: currentSessionId || "", 
-          role: "assistant", 
-          content: "", 
-          citations: [], 
-          created_at: new Date().toISOString() 
-        }
+        { id: user_message_id, session_id: currentSessionId || session_id, role: "user", content: q, citations: [], created_at: new Date().toISOString() },
+        { id: assistant_message_id, session_id: currentSessionId || session_id, role: "assistant", content: "", citations: [], status: "queued", created_at: new Date().toISOString() }
       ]);
 
-      let finalSessionId = currentSessionId;
+      setStatusMessage("Waiting for worker...");
       let streamedAnswer = "";
       let streamedCitations: Citation[] = [];
-      let finalResponse: RagResponse | null = null;
-      let hasClearedStatusForStream = false;
-      let lastUpdateTime = 0;
 
-      await apiClient.askQuestionStream(
-        q,
-        docs,
-        sessionId,
+      // Promise blocks here until the stream finishes naturally, keeping UI alive
+      await apiClient.streamChatResponse(
+        assistant_message_id,
         (chunk: StreamChunk) => {
-          if (chunk.type === "session") {
-            finalSessionId = chunk.session_id;
-            setSessionId(chunk.session_id);
-            localStorage.setItem("rag_session_id", chunk.session_id);
-          } 
-          else if (chunk.type === "status") {
+          if (chunk.type === "status") {
              setStatusMessage(chunk.message);
           }
           else if (chunk.type === "token") {
-            setStatusMessage(null);
-            streamedAnswer += chunk.content;
-            
-            // THROTTLE STATE UPDATES TO ONCE EVERY 50ms
-            const now = Date.now();
-            if (now - lastUpdateTime > 50) {
-                setChatHistory((prev) => prev.map((msg) => 
-                  msg.id === tempAssistantMsgId 
-                    ? { ...msg, content: streamedAnswer } 
-                    : msg
-                ));
-                lastUpdateTime = now;
+            // THE FIX: Do not wipe the status message until the LLM actually outputs a visible word!
+            if (chunk.content.trim().length > 0) {
+                setStatusMessage(null);
             }
-          } 
-          else if (chunk.type === "done") {
-            streamedCitations = chunk.citations;
             
-            // FINAL FLUSH: Guarantee the final state is fully updated when done
+            streamedAnswer += chunk.content;
             setChatHistory((prev) => prev.map((msg) => 
-              msg.id === tempAssistantMsgId 
-                ? { ...msg, content: streamedAnswer, citations: streamedCitations } 
-                : msg
+              msg.id === assistant_message_id ? { ...msg, content: streamedAnswer, status: "processing" } : msg
             ));
-
-            if (finalSessionId) {
-                setResponse({
-                    session_id: finalSessionId,
-                    answer: streamedAnswer,
-                    citations: streamedCitations
-                });
+          }
+          else if (chunk.type === "done") {
+            streamedCitations = chunk.citations || [];
+            setChatHistory((prev) => prev.map((msg) => 
+              msg.id === assistant_message_id ? { ...msg, content: streamedAnswer, citations: streamedCitations, status: "completed" } : msg
+            ));
+            if (session_id) {
+                setResponse({ session_id, answer: streamedAnswer, citations: streamedCitations });
             }
           }
           else if (chunk.type === "error") {
              setError(chunk.error);
           }
         },
-        signal
+        signal,
+        () => {
+          // THE FIX: Same replay-reset safety net as the reconnect path -
+          // guards against the browser's native EventSource auto-reconnect
+          // firing mid-generation and re-appending already-streamed tokens.
+          streamedAnswer = "";
+          setStatusMessage("Reconnecting to stream...");
+          setChatHistory((prev) => prev.map((msg) =>
+            msg.id === assistant_message_id ? { ...msg, content: "" } : msg
+          ));
+        }
       );
 
-      if (finalSessionId) {
-        await loadHistory(finalSessionId);
-      }
-      return finalResponse;
+      return { session_id, answer: streamedAnswer, citations: streamedCitations };
 
     } catch (err: unknown) {
-      if (isAbortError(err)) {
-        return null;
-      }
+      if (isAbortError(err)) return null;
       setError(err instanceof Error ? err.message : "Failed to get an answer.");
       return null;
     } finally {
       setIsLoading(false);
+      setQuery("");
+      setStatusMessage(null);
     }
   };
 
@@ -191,19 +224,11 @@ export function useRAGQuery() {
     if (!activeSessionId || !newText.trim()) return;
 
     try {
-      // 1. Only call the backend DELETE if it is a real database UUID, 
-      // skipping temporary optimistic IDs to prevent 404 errors.
-      if (!messageId.startsWith("temp-")) {
-        await apiClient.truncateChatHistory(activeSessionId, messageId);
-      }
-
-      // 2. Optimistically slice the UI state
+      await apiClient.truncateChatHistory(activeSessionId, messageId);
       setChatHistory((prev) => {
         const index = prev.findIndex((message) => message.id === messageId);
         return index !== -1 ? prev.slice(0, index) : prev;
       });
-
-      // 3. Re-trigger the generation
       await askQuestion(undefined, selectedDocIds, newText);
     } catch (err) {
       console.error("Failed to edit message:", err);
@@ -216,21 +241,13 @@ export function useRAGQuery() {
     setError(null);
     setSessionId(null);
     setChatHistory([]);
-    localStorage.removeItem("rag_session_id");
-    localStorage.removeItem("rag_chat_history");
+    setStatusMessage(null);
+    
+    localStorage.removeItem("rag_last_session_id");
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.delete("session_id");
+    router.replace(`${pathname}?${newParams.toString()}`);
   };
 
-  return {
-    query,
-    setQuery,
-    isLoading,
-    response,
-    error,
-    askQuestion,
-    handleEditMessage,
-    clearChat,
-    chatHistory,
-    sessionId,
-    statusMessage
-  };
+  return { query, setQuery, isLoading, response, error, setError, askQuestion, handleEditMessage, clearChat, chatHistory, sessionId, statusMessage };
 }

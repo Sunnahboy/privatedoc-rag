@@ -16,7 +16,15 @@ class Base(DeclarativeBase):
     """
 
 
-engine = create_async_engine(settings.database_url, echo=settings.database_echo)
+engine = create_async_engine(
+    settings.database_url, 
+    echo=settings.database_echo,
+    # THE FIX: This prevents the 'connection is closed' InterfaceError 
+    # when the database container restarts or drops idle TCP sockets.
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20
+)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

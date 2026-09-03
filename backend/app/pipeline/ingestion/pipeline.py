@@ -15,7 +15,7 @@ from app.pipeline.cleaning.text_cleaner import TextCleaner
 from app.pipeline.detector.models import DocumentVisualJobMessage
 from app.pipeline.detector.visual_detector import VisualRichDetector
 from app.pipeline.embeddings.base import BaseEmbedder
-from app.pipeline.embeddings.ollama_embedder import OllamaEmbedder
+from app.pipeline.embeddings.factory import create_embedder
 from app.pipeline.extraction.factory import ExtractorFactory
 from app.pipeline.indexing.composite_indexer import CompositeIndexer
 from app.pipeline.indexing.interface import BaseIndexer
@@ -58,7 +58,8 @@ class IngestionPipeline(BaseIngestionPipeline):
         else:
             self.chunker = MarkdownSemanticChunker()
             
-        self.embedder = embedder or OllamaEmbedder()
+        
+        self.embedder = embedder or create_embedder()
         self.indexer = indexer or CompositeIndexer()
         self.visual_detector = visual_detector or VisualRichDetector()
 

@@ -49,7 +49,7 @@ function ToolbarButton({
       className={`inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 ${
         active
           ? "border-primary/30 bg-primary/10 text-primary"
-          : "border-outline-variant/30 bg-white text-on-surface hover:bg-surface"
+          : "border-outline-variant/30 bg-surface-elevated text-on-surface hover:bg-surface"
       }`}
     >
       {children}
@@ -85,7 +85,7 @@ export default function ReaderToolbar({
     : documentTitle ?? "Reader";
 
   return (
-    <div className="z-10 border-b border-outline-variant/20 bg-[#F7F5EF]">
+    <div className="z-10 border-b border-outline-variant/20 bg-reader-surface">
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 md:px-6">
         <div className="min-w-0">
           <p className="text-sm font-medium text-on-surface">{pageCounterLabel}</p>
@@ -97,7 +97,7 @@ export default function ReaderToolbar({
           aria-expanded={isOpen}
           aria-controls="reader-toolbar-controls"
           onClick={onToggleOpen}
-          className="inline-flex h-9 items-center gap-2 rounded-md border border-outline-variant/30 bg-white px-3 text-sm text-on-surface transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          className="inline-flex h-9 items-center gap-2 rounded-md border border-outline-variant/30 bg-surface-elevated px-3 text-sm text-on-surface transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           <span className="material-symbols-outlined text-[18px]">
             {isOpen ? "keyboard_arrow_up" : "keyboard_arrow_down"}
@@ -127,7 +127,7 @@ export default function ReaderToolbar({
             </p>
 
             <div className="mt-2 flex flex-wrap items-center gap-2 md:hidden">
-              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-white p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-surface-elevated p-1">
                 <ToolbarButton ariaLabel="Previous page" onClick={onPrevious} disabled={isAtFirstPosition || navigationLocked}>
                   <span className="material-symbols-outlined text-[18px]">chevron_left</span>
                 </ToolbarButton>
@@ -136,7 +136,7 @@ export default function ReaderToolbar({
                   <span className="material-symbols-outlined text-[18px]">chevron_right</span>
                 </ToolbarButton>
               </div>
-              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-white p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-surface-elevated p-1">
                 <ToolbarButton ariaLabel="Zoom out" onClick={onZoomOut}>
                   <span className="material-symbols-outlined text-[18px]">remove</span>
                 </ToolbarButton>
@@ -145,10 +145,10 @@ export default function ReaderToolbar({
                 </ToolbarButton>
               </div>
               <details className="relative">
-                <summary className="inline-flex h-9 cursor-pointer list-none items-center rounded-md border border-outline-variant/30 bg-white px-3 text-sm text-on-surface transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
+                <summary className="inline-flex h-9 cursor-pointer list-none items-center rounded-md border border-outline-variant/30 bg-surface-elevated px-3 text-sm text-on-surface transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
                   More controls
                 </summary>
-                <div className="absolute right-0 z-20 mt-2 flex min-w-55 flex-col gap-1 rounded-md border border-outline-variant/30 bg-white p-2 shadow-sm">
+                <div className="absolute right-0 z-20 mt-2 flex min-w-55 flex-col gap-1 rounded-md border border-outline-variant/30 bg-surface-elevated p-2 shadow-sm">
                   <button type="button" onClick={() => onViewModeChange("single")} className="rounded px-2 py-1 text-left text-sm hover:bg-surface">Single</button>
                   <button type="button" onClick={() => onViewModeChange("double")} className="rounded px-2 py-1 text-left text-sm hover:bg-surface">Spread</button>
                   <button type="button" onClick={() => onViewModeChange("scroll")} className="rounded px-2 py-1 text-left text-sm hover:bg-surface">Scroll</button>
@@ -162,7 +162,7 @@ export default function ReaderToolbar({
             </div>
 
             <div className="mt-2 hidden flex-wrap items-center gap-2 md:flex">
-              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-white p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-surface-elevated p-1">
                 <ToolbarButton ariaLabel="Previous page" onClick={onPrevious} disabled={isAtFirstPosition || navigationLocked}>
                   <span className="material-symbols-outlined text-[18px]">chevron_left</span>
                 </ToolbarButton>
@@ -196,7 +196,7 @@ export default function ReaderToolbar({
                 </ToolbarButton>
               </div>
 
-              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-white p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-surface-elevated p-1">
                 <ToolbarButton ariaLabel="Zoom out" onClick={onZoomOut}>
                   <span className="material-symbols-outlined text-[18px]">remove</span>
                 </ToolbarButton>
@@ -222,27 +222,27 @@ export default function ReaderToolbar({
                 </ToolbarButton>
               </div>
 
-              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-white p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-surface-elevated p-1">
                 <ToolbarButton
-                  ariaLabel="Normal reading mode"
+                  ariaLabel="Full View"
                   onClick={() => onReadingModeChange("normal")}
                   active={readingMode === "normal"}
                 >
-                  Normal
+                  Full View
                 </ToolbarButton>
                 <ToolbarButton
-                  ariaLabel="Focus reading mode"
+                  ariaLabel="Document Focus"
                   onClick={() => onReadingModeChange("focus")}
                   active={readingMode === "focus"}
                 >
-                  Focus
+                  Document Focus
                 </ToolbarButton>
                 <ToolbarButton
-                  ariaLabel="Study reading mode"
+                  ariaLabel="Chat Focus"
                   onClick={() => onReadingModeChange("study")}
                   active={readingMode === "study"}
                 >
-                  Study
+                  Chat Focus
                 </ToolbarButton>
               </div>
             </div>

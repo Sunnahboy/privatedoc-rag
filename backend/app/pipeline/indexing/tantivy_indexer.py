@@ -80,33 +80,41 @@ class TantivyIndexer(BaseSparseIndex):
         self,
         query: str,
         top_k: int,
-        document_id: str | None = None,
+        document_ids: list[str] | None = None, # THE FIX: Accept list
     ) -> list[RetrievedChunk]:
         # Reload so this searcher sees segments committed by any other instance.
         self.index.reload()
         self.searcher = self.index.searcher()
-        # Remove Lucene special characters that break Tantivy's parser
         
+        # Remove Lucene special characters that break Tantivy's parser
         safe_query = re.sub(r'[\+\-\&&\|!(){}[\]^"~*?:\\/]', ' ', query).strip()
         # Fallback to alphanumeric words if empty
         if not safe_query:
             safe_query = query
 
-        if document_id:
-            query = f'document_id:"{document_id}" AND ({query})'
+        # THE FIX: Construct a valid Boolean OR clause for multiple documents
+        if document_ids:
+            # Creates: document_id:"doc_1" OR document_id:"doc_2"
+            doc_or_clause = " OR ".join(f'document_id:"{doc_id}"' for doc_id in document_ids)
+            
+            # BUG FIX: Use safe_query here, NOT the raw query!
+            final_query = f'({doc_or_clause}) AND ({safe_query})'
         else:
-            query = safe_query
+            final_query = safe_query
+            
         query_parser, errors = self.index.parse_query_lenient(
-            query,
+            final_query,
             ["document_id", "text"],
         )
 
         if errors:
             logging.debug("Tantivy query parser recovered from: %s", errors)
+            
         hits = self.searcher.search(
             query_parser,
             limit=top_k,
         )
+        
         results: list[RetrievedChunk] = []
         for score, doc_address in hits.hits:
             doc = self.searcher.doc(doc_address)

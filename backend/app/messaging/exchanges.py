@@ -21,8 +21,15 @@ async def declare_exchanges(
         type=aio_pika.ExchangeType.DIRECT,
         durable=True,
     )
+    #Declare the Chat Exchange
+    chat_exchange = await channel.declare_exchange(
+        name=settings.CHAT_EXCHANGE_NAME,
+        type=aio_pika.ExchangeType.DIRECT,
+        durable=True,
+    )
 
     return {
         "doc_exchange": doc_exchange,
         "dlx_exchange": dlx_exchange,
+        "chat_exchange": chat_exchange,
     }

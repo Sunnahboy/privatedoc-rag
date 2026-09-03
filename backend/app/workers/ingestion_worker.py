@@ -1,6 +1,6 @@
 import asyncio
 import logging
-
+import signal
 from aio_pika import IncomingMessage
 from sqlalchemy import select
 
@@ -123,31 +123,48 @@ async def process_job(message: IncomingMessage) -> None:
 async def run_worker() -> None:
     """Starts the standalone worker looping using the RabbitMQ manager."""
     logger.info("Starting ingestion worker...")
-    # Initialize the connection manager
+    
     await rabbitmq_manager.initialize()
-
-    # Get a dedicated consumer channel bypassing the publisher pool
     channel = await rabbitmq_manager.create_consumer_channel()
-
-    # Prefetch=1 protects  memory constraints
     await channel.set_qos(prefetch_count=settings.prefetch_count)
-
-    # Ensure Topology exists
     queues = await setup_queues_and_bindings(channel)
-
     main_queue = queues["main_queue"]
+
+    # THE FIX: Create a shutdown event
+    shutdown_event = asyncio.Event()
+
+    # Define the signal handler
+    def handle_shutdown(sig, frame):
+        logger.warning(f"Received termination signal ({sig}). Initiating graceful shutdown...")
+        shutdown_event.set()
+
+    # Register the signal handlers (Ctrl+C and Docker SIGTERM)
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda s=sig: handle_shutdown(s, None))
 
     logger.info("Ingestion Worker online. Listening on queue '%s'...", main_queue.name)
 
-    await main_queue.consume(process_job)
+    # Start consuming messages
+    consumer_tag = await main_queue.consume(process_job)
 
     try:
-        # Keeps worker process alive
-        await asyncio.Future()
+        # THE FIX: Wait until a shutdown signal is received, instead of hanging forever
+        await shutdown_event.wait()
     finally:
+        logger.info("Graceful shutdown initiated. Stopping new message consumption...")
+        # 1. Stop taking new jobs immediately
+        await main_queue.cancel(consumer_tag)
+        
+        # 2. Close channels and connections cleanly (this allows current in-flight ACKs to send)
+        logger.info("Closing RabbitMQ connections...")
         await channel.close()
         await rabbitmq_manager.close()
-
+        logger.info("Worker shutdown complete.")
 
 if __name__ == "__main__":
-    asyncio.run(run_worker())
+    try:
+        asyncio.run(run_worker())
+    except KeyboardInterrupt:
+        # Fallback for manual Ctrl+C in terminals that might bypass the signal handler
+        logger.info("Worker stopped manually.")

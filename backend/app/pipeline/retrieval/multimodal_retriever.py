@@ -3,7 +3,6 @@ import logging
 from typing import Any
 
 from app.config import settings
-from app.pipeline.embeddings.base import BaseEmbedder
 from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
 from qdrant_client import AsyncQdrantClient, models
 from app.pipeline.retrieval.hybrid_retriever import HybridRetriever
@@ -28,28 +27,29 @@ class MultimodalRetriever:
         )
 
     async def retrieve(
-        self, query: str, document_id: str, limit: int = 5
+        self, query: str, document_ids: list[str], limit: int = 5 # BUG 1 FIXED: list[str]
     ) -> dict[str, list[Any]]:
         """
         Executes parallel searches across both the text and visual collections.
-        Filters by the specific document_id.
+        Filters by the specific document_ids.
         """
-        logger.info(f"Executing multimodal retrieval for query: '{query}'")
+        logger.info(f"Executing multimodal retrieval for query: '{query}' across {len(document_ids)} docs")
 
-        
         # Hybrid Text Task (Handles dense, sparse, and reranking internally)
         text_task = self.text_retriever.retrieve(
             query=query, 
             top_k=limit, 
-            document_id=document_id
+            document_ids=document_ids # BUG 2 FIXED: pass list
         )
-       # 2. Visual Task (Handles ColQwen2 encoding and Qdrant nearest-neighbor search)
+        
+        # 2. Visual Task (Handles ColQwen2 encoding and Qdrant nearest-neighbor search)
         async def _visual_search():
             visual_vector = await asyncio.to_thread(self.visual_engine.embed_query, query)
             doc_filter = models.Filter(
                 must=[
                     models.FieldCondition(
-                        key="document_id", match=models.MatchValue(value=document_id)
+                        key="document_id", 
+                        match=models.MatchAny(any=document_ids) # BUG 3 FIXED: MatchAny
                     )
                 ]
             )
@@ -61,23 +61,19 @@ class MultimodalRetriever:
             )
             return response.points
 
-        
         # Execute both entirely different retrieval pipelines concurrently
         text_result, visual_results = await asyncio.gather(
             text_task, _visual_search()
         )
 
-        
-
-        
-        
-    # Format Text Chunks (RetrievedChunk domain models)
+        # Format Text Chunks (RetrievedChunk domain models)
         formatted_text_chunks = [
             {
                 "score": chunk.score,
                 "text": chunk.text,
                 "page_number": getattr(chunk, "page_number", None),
                 "chunk_id": getattr(chunk, "chunk_id", None),
+                "document_id": getattr(chunk, "document_id", "unknown"), # Pass this up
             }
             for chunk in getattr(text_result, "chunks", [])
         ]
@@ -88,6 +84,7 @@ class MultimodalRetriever:
                 "score": hit.score,
                 "page_number": hit.payload.get("page_number") if hit.payload else None,
                 "reasons": hit.payload.get("reasons", []) if hit.payload else [],
+                "document_id": hit.payload.get("document_id") if hit.payload else None, # BUG 4 FIXED: Required for PDF extraction
             }
             for hit in (visual_results or [])
         ]

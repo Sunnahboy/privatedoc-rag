@@ -36,7 +36,7 @@ class MultimodalRetrievalPipeline:
     async def search(
         self,
         query: str,
-        document_id: str,
+        document_ids: list[str],
         text_top_k: int = 20,
         visual_top_k: int = 2,
         final_top_k: int = 8,
@@ -44,15 +44,17 @@ class MultimodalRetrievalPipeline:
         # 1. Parallel search in Qdrant
         raw_results = await self.retriever.retrieve(
             query=query,
-            document_id=document_id,
+            document_ids=document_ids,
             limit=max(text_top_k, 10),
         )
 
         # 2. Rerank text chunks via FlashRank
+        # 2. Rerank text chunks via FlashRank
         raw_chunks = [
             RetrievedChunk(
-                chunk_id=f"{document_id}_text_{idx}",
-                document_id=document_id,
+                # Safely extract the exact document_id from the Qdrant item payload
+                chunk_id=f"{item.get('document_id', 'unknown')}_text_{idx}",
+                document_id=item.get("document_id", "unknown"),
                 text=item["text"],
                 page_number=item.get("page_number"),
                 score=item.get("score", 0.0),
@@ -60,9 +62,10 @@ class MultimodalRetrievalPipeline:
             )
             for idx, item in enumerate(raw_results.get("text_chunks", []))
         ]
+        top_fused_chunks = raw_chunks[:text_top_k]
         reranked_chunks = self.reranker.rerank(
             query=query,
-            chunks=raw_chunks,
+            chunks=top_fused_chunks,
             top_k=final_top_k,
         )
 

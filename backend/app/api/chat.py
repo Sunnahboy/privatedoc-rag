@@ -31,9 +31,15 @@ async def get_recent_messages(session_id: str, limit: int = 100, db: AsyncSessio
     Uses SQLAlchemy 2.0 async select statements.
     """
     #Build the query
+    # BUG FIX: user/assistant pairs share the same `created_at` timestamp
+    # (inserted in the same commit), so `created_at` alone is not a stable
+    # sort key - ties can be returned in either order. `seq` is a DB-assigned
+    # autoincrementing column that always reflects true insertion order, so
+    # it's used as the primary sort key to guarantee the assistant reply is
+    # never ordered before its own user question.
     stmt = select(ChatMessage)\
         .filter(ChatMessage.session_id == session_id)\
-        .order_by(desc(ChatMessage.created_at))\
+        .order_by(desc(ChatMessage.seq))\
         .limit(limit)
     
     #Execute the async query

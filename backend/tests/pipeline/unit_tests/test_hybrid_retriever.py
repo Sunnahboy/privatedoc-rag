@@ -203,19 +203,19 @@ async def test_document_id_propagated(
 
     await hybrid.retrieve(
         query="fault tolerance",
-        document_id="doc123",
+        document_ids=["doc123"],
     )
     expected_top_k = settings.top_k_search * settings.hybrid_candidate_multiplier
     dense.retrieve.assert_awaited_once_with(
         query="fault tolerance",
         top_k=expected_top_k,
-        document_id="doc123",
+        document_ids=["doc123"],
     )
 
     sparse.retrieve.assert_awaited_once_with(
         query="fault tolerance",
         top_k=expected_top_k,
-        document_id="doc123",
+        document_ids=["doc123"],
     )
 
 

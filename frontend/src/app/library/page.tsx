@@ -10,6 +10,7 @@ import { FileUploader } from "@/components/upload/FileUploader";
 import { useDocuments } from "@/hooks/useDocuments";
 import { normalizeDocumentStatus } from "@/lib/api-client";
 import { API_BASE_URL } from "@/lib/constants";
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 
 type ViewMode = "grid" | "list";
 type StatusFilter = "all" | "indexed" | "processing" | "failed";
@@ -34,7 +35,7 @@ const DocumentThumbnail = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-full items-center justify-center rounded border border-outline-variant/40 bg-[#fdfcf8] text-xs text-on-surface-variant">
+      <div className="flex h-full items-center justify-center rounded border border-outline-variant/40 bg-surface-container-low text-xs text-on-surface-variant">
         Loading preview…
       </div>
     ),
@@ -93,11 +94,12 @@ export default function LibraryPage() {
   ).length;
 
   return (
-    <div className="min-h-screen bg-[#F4F1EA] text-on-surface antialiased">
-      <header className="sticky top-0 z-30 border-b border-outline-variant/20 bg-[#F7F5EF]/95 backdrop-blur">
+    <div className="min-h-screen bg-background text-on-surface antialiased">
+      <header className="sticky top-0 z-30 border-b border-outline-variant/20 bg-reader-surface/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-310 items-center justify-between px-4 md:px-6">
           <p className="text-base font-semibold tracking-tight text-primary">PrivateDoc</p>
           <div className="flex items-center gap-2">
+            <ThemeSwitcher />
             <button
               type="button"
               onClick={() => setShowUploadPanel((current) => !current)}
@@ -111,7 +113,7 @@ export default function LibraryPage() {
               type="button"
               onClick={() => void fetchDocuments()}
               aria-label="Refresh documents"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-outline-variant/30 bg-white text-on-surface-variant transition-colors hover:bg-surface"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-outline-variant/30 bg-surface-elevated text-on-surface-variant transition-colors hover:bg-surface-container"
             >
               <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
                 refresh
@@ -142,7 +144,7 @@ export default function LibraryPage() {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search your documents..."
-              className="w-full rounded-lg border border-outline-variant/30 bg-white py-2.5 pl-10 pr-16 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.03)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low py-2.5 pl-10 pr-16 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.03)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-outline-variant/30 bg-surface px-2 py-0.5 text-[11px] text-on-surface-variant">
               Ctrl/Cmd + K
@@ -153,7 +155,7 @@ export default function LibraryPage() {
         {(showUploadPanel || hasNoDocuments) && (
           <section
             id="library-upload-panel"
-            className="mt-6 rounded-lg border border-outline-variant/20 bg-white p-4 md:p-5"
+            className="mt-6 rounded-lg border border-outline-variant/20 bg-surface-elevated p-4 md:p-5"
           >
             <h2 className="text-sm font-semibold">Upload document</h2>
             <p className="mt-1 text-xs text-on-surface-variant">Add a PDF to your private reading library.</p>
@@ -163,7 +165,7 @@ export default function LibraryPage() {
           </section>
         )}
 
-        <section className="mt-8 rounded-lg border border-outline-variant/20 bg-white p-5">
+        <section className="mt-8 rounded-lg border border-outline-variant/20 bg-surface-elevated p-5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
             {continueReadingDoc ? "Recently Indexed" : "Continue Reading"}
           </p>
@@ -171,11 +173,11 @@ export default function LibraryPage() {
             <button
               type="button"
               onClick={() => router.push(`/workspace/${continueReadingDoc.document_id}`)}
-              className="mt-3 w-full rounded-lg border border-outline-variant/20 bg-[#f8f6f1] p-4 text-left transition-colors hover:bg-[#f2efe7]"
+              className="mt-3 w-full rounded-lg border border-outline-variant/20 bg-surface-container-low p-4 text-left transition-colors hover:bg-surface-container"
             >
               <div className="flex items-start gap-4">
                 <div className="w-16 shrink-0 sm:w-20 md:w-24 lg:w-20 xl:w-24">
-                  <div className="aspect-4/5  overflow-hidden rounded-md border border-outline-variant/30 bg-white">
+                  <div className="aspect-4/5  overflow-hidden rounded-md border border-outline-variant/30 bg-surface-elevated">
                     <DocumentThumbnail
                       documentId={continueReadingDoc.document_id}
                       originalFilename={continueReadingDoc.original_filename}
@@ -210,12 +212,12 @@ export default function LibraryPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 self-start rounded-md border border-outline-variant/20 bg-white p-1">
+              <div className="flex items-center gap-2 self-start rounded-md border border-outline-variant/20 bg-surface-elevated p-1">
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
                   className={`inline-flex items-center rounded px-2 py-1 text-xs transition-colors ${
-                    viewMode === "grid" ? "bg-primary/10 text-primary" : "text-on-surface-variant hover:bg-surface"
+                    viewMode === "grid" ? "bg-primary/10 text-primary" : "text-on-surface-variant hover:bg-surface-container"
                   }`}
                   aria-pressed={viewMode === "grid"}
                 >
@@ -225,7 +227,7 @@ export default function LibraryPage() {
                   type="button"
                   onClick={() => setViewMode("list")}
                   className={`inline-flex items-center rounded px-2 py-1 text-xs transition-colors ${
-                    viewMode === "list" ? "bg-primary/10 text-primary" : "text-on-surface-variant hover:bg-surface"
+                    viewMode === "list" ? "bg-primary/10 text-primary" : "text-on-surface-variant hover:bg-surface-container"
                   }`}
                   aria-pressed={viewMode === "list"}
                 >
@@ -248,8 +250,8 @@ export default function LibraryPage() {
                     className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                       isActive
                         ? "border-primary/40 bg-primary/10 text-primary"
-                        : "border-outline-variant/30 bg-white text-on-surface-variant"
-                    } ${tab.available ? "hover:bg-surface" : "cursor-not-allowed opacity-60"}`}
+                        : "border-outline-variant/30 bg-surface-elevated text-on-surface-variant"
+                    } ${tab.available ? "hover:bg-surface-container" : "cursor-not-allowed opacity-60"}`}
                   >
                     {tab.label}
                   </button>
@@ -268,7 +270,7 @@ export default function LibraryPage() {
                     className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                       isActive
                         ? "border-primary/40 bg-primary/10 text-primary"
-                        : "border-outline-variant/30 bg-white text-on-surface-variant hover:bg-surface"
+                        : "border-outline-variant/30 bg-surface-elevated text-on-surface-variant hover:bg-surface-container"
                     }`}
                   >
                     {filter.label}
@@ -279,14 +281,14 @@ export default function LibraryPage() {
           </div>
 
           {error && (
-            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mt-4 rounded-lg border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
               Unable to refresh your library right now. Please try again.
             </div>
           )}
 
           <div className="mt-4">
             {hasNoSearchResults ? (
-              <div className="rounded-lg border border-outline-variant/20 bg-white px-5 py-8 text-center text-sm text-on-surface-variant">
+              <div className="rounded-lg border border-outline-variant/20 bg-surface-elevated px-5 py-8 text-center text-sm text-on-surface-variant">
                 No documents found. Try a different search or filter.
               </div>
             ) : viewMode === "grid" ? (

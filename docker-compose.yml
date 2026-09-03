@@ -20,6 +20,7 @@ services:
       - "127.0.0.1:7001:6334"    # gRPC API 
     volumes:
       - qdrant_data:/qdrant/storage
+    restart: unless-stopped
   postgres:
     image: postgres:16
     container_name: privatedoc_postgres
@@ -32,7 +33,13 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
-
+  valkey:
+      image: valkey/valkey:latest
+      container_name: privatedoc_valkey
+      ports:
+        - "127.0.0.1:6379:6379"
+      command: valkey-server --save "" --appendonly no
+      restart: unless-stopped
 volumes:
   rabbitmq_data:
   qdrant_data:

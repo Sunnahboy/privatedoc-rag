@@ -235,10 +235,11 @@ class RabbitMQManager:
         if exc:
             logger.warning(
                 "RabbitMQ connection closed unexpectedly: %s",
+                sender,
                 exc,
             )
         else:
-            logger.info("RabbitMQ connection closed cleanly.")
+            logger.info("RabbitMQ connection closed cleanly by %s.", sender)
 
     @staticmethod
     def _on_connection_reconnect(sender: AbstractRobustConnection) -> None:
