@@ -6,17 +6,46 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.orchestration.rag_pipeline import RAGPipeline
 from app.config import settings
-
+from app.models.chat import ChatMessage
+from app.pipeline.retrieval.query_rewriter import QueryRewriter
 logger = logging.getLogger(__name__)
 
 # Initialize Valkey client for the worker
 valkey_client = redis.from_url(settings.valkey_url, decode_responses=True)
 
 class ChatWorker:
-    def __init__(self, rag_pipeline: RAGPipeline):
+    def __init__(self, rag_pipeline: RAGPipeline,query_rewriter: QueryRewriter):
         self.rag_pipeline = rag_pipeline
-
-    async def process_chat_job(self, message_id: str, session_id: str, question:str, document_id:str, db: AsyncSession):
+        self.query_rewriter = query_rewriter
+    async def _get_chat_history(
+        self, 
+        session_id: str, 
+        current_message_id: str, 
+        db: AsyncSession, 
+        limit: int = 6
+    ) -> list[ChatMessage]:
+        query = text("""
+            SELECT role, content 
+            FROM chat_messages 
+            WHERE session_id = :session_id 
+              AND id != :current_message_id
+              AND status = 'completed'
+            ORDER BY created_at DESC 
+            LIMIT :limit
+        """)
+        result = await db.execute(
+            query, 
+            {
+                "session_id": session_id, 
+                "current_message_id": current_message_id, 
+                "limit": limit
+            }
+        )
+        rows = result.fetchall()
+        # Reversed so the LLM reads messages chronologically (oldest to newest)
+        return [ChatMessage(role=r.role, content=r.content) for r in reversed(rows)]
+    
+    async def process_chat_job(self, message_id: str, session_id: str, question:str, document_ids:list[str], db: AsyncSession):
         stream_key = f"chat:stream:{message_id}"
         generated_chunks: list[str] = []
         final_citations = "[]"
@@ -29,10 +58,21 @@ class ChatWorker:
         await db.commit()
 
         try:
+            chat_history = await self._get_chat_history(
+                session_id=session_id, 
+                current_message_id=message_id, 
+                db=db,
+                limit=6
+            )
+            search_query = await self.query_rewriter.rewrite(
+                query=question,
+                chat_history=chat_history
+            )
+
             stream = self.rag_pipeline.ask_stream(
-                question=question,
-                document_id=document_id,
-                chat_history=[], 
+                question=search_query,
+                document_ids=document_ids,
+                chat_history=chat_history, 
             )
 
             # LIVE GENERATION: Write to Valkey RAM buffer
@@ -76,7 +116,7 @@ class ChatWorker:
             await valkey_client.expire(stream_key, 600)
 
         except Exception as exc:
-            logger.error("Chat generation failed for %s: %s", message_id, str(exc))
+            logger.exception("Chat generation failed for %s", message_id)
             await db.rollback()
             
             await db.execute(

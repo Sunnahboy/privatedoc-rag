@@ -65,16 +65,15 @@ async def ask(
     publishes to RabbitMQ, and returns the message IDs.
     """
 
-    if payload.document_id:
-        document = await document_service.get_document_by_id(
-            payload.document_id,
-            db,
-        )
-
-        if document is None:
+    if payload.document_ids:
+        # The router delegates business logic to the service
+        missing_ids = await document_service.validate_document_ids(payload.document_ids, db)
+        
+        if missing_ids:
+            # The router handles the HTTP response
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document '{payload.document_id}' not found.",
+                detail=f"Documents not found: {', '.join(missing_ids)}",
             )
      # Resolve the Chat Session
     active_session_id = await get_or_create_session(
@@ -115,7 +114,7 @@ async def ask(
         message_id=assistant_msg_id,
         session_id=active_session_id,
         question=payload.question,
-        document_id=payload.document_id
+        document_ids=payload.document_ids
     )
 
     #Return instantly. 

@@ -241,7 +241,19 @@ async def get_document_by_id(document_id: str, db: AsyncSession) -> DocumentList
 
     # Convert ORM model to Pydantic response model to satisfy FastAPI response validation
     return _document_to_list_item(doc)
-
+async def validate_document_ids(requested_ids: list[str], db: AsyncSession) -> set[str]:
+    """
+    Fetches valid IDs in O(1) network calls. 
+    Returns the set of IDs that were NOT found in the database.
+    """
+    if not requested_ids:
+        return set()
+        
+    stmt = select(Document.id).filter(Document.id.in_(requested_ids))
+    result = await db.execute(stmt)
+    found_ids = set(result.scalars().all())
+    
+    return set(requested_ids) - found_ids
 
 async def list_documents(db: AsyncSession) -> list[DocumentListItem]:
     """

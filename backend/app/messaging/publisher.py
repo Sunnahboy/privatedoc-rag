@@ -29,7 +29,7 @@ async def publish_ingestion_job(document_id: str, storage_key: str) -> None:
         exchange = await channel.declare_exchange(
             name=settings.DOCUMENT_EXCHANGE_NAME, 
             type=aio_pika.ExchangeType.DIRECT,
-            ensure=True
+            durable=True
         )
         await exchange.publish(message, routing_key=settings.INGESTION_ROUTING_KEY)
 
@@ -39,7 +39,7 @@ async def publish_chat_job(
     message_id: str, 
     session_id: str, 
     question: str, 
-    document_id: str | None
+    document_ids: list[str] | None
 )->None:
     """Publishe a persitent chat message using a pooled channel"""
     pool = rabbitmq_manager.get_channel_pool()
@@ -49,7 +49,7 @@ async def publish_chat_job(
         message_id=message_id,
         session_id=session_id,
         question=question,
-        document_id=document_id,
+        document_ids=document_ids or [],
     )
 
     #Package as a persistent message

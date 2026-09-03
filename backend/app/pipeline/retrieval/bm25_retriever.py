@@ -25,7 +25,7 @@ class BM25Retriever(BaseRetriever):
         self,
         query: str,
         top_k: int | None = None,
-        document_id: str | None = None,
+        document_ids: list[str] | None = None,
     ) -> RetrievalResult:
         if not query.strip():
             raise RetrievalError("Query cannot be empty")
@@ -35,7 +35,7 @@ class BM25Retriever(BaseRetriever):
         chunks = await self.index.search(
             query=query,
             top_k=limit,
-            document_id=document_id,
+            document_ids=document_ids,
         )
 
         

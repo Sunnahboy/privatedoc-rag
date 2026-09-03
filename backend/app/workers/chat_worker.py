@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from aio_pika import IncomingMessage
-
+import signal 
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.messaging.connection import rabbitmq_manager
@@ -16,14 +16,12 @@ from app.pipeline.retrieval.multimodal_retriever import MultimodalRetriever
 from app.pipeline.retrieval.multimodal_pipeline import MultimodalRetrievalPipeline
 from app.orchestration.rag_pipeline import RAGPipeline
 from app.utils.logging_utils import configure_logging
-
-# WHAT BREAKS: If you are on Windows/Mac, this import might fail due to case-insensitivity.
 from .Chatworker import ChatWorker
-
+from app.pipeline.retrieval.query_rewriter import QueryRewriter
 configure_logging()
 logger = logging.getLogger(__name__)
 
-async def process_message(message: IncomingMessage, rag_pipeline: RAGPipeline) -> None:
+async def process_message(message: IncomingMessage, rag_pipeline: RAGPipeline ,query_rewriter: QueryRewriter) -> None:
     try:
         payload = ChatGenerationMessage.model_validate_json(message.body)
     except Exception as e:
@@ -33,14 +31,17 @@ async def process_message(message: IncomingMessage, rag_pipeline: RAGPipeline) -
 
     should_reject = False
     async with AsyncSessionLocal() as db:
-        worker = ChatWorker(rag_pipeline=rag_pipeline)
+        worker = ChatWorker(
+            rag_pipeline=rag_pipeline,
+            query_rewriter=query_rewriter
+            )
         try:
             logger.info(f"Processing chat job for message {payload.message_id}")
             await worker.process_chat_job(
                 message_id=payload.message_id,
                 session_id=payload.session_id,
                 question=payload.question,
-                document_id=payload.document_id,
+                document_ids=payload.document_ids,
                 db=db
             )
             await message.ack()
@@ -68,6 +69,8 @@ async def process_message(message: IncomingMessage, rag_pipeline: RAGPipeline) -
             await message.ack()
             await rabbitmq_manager.publish_to_graveyard(message.body)
 
+
+
 async def run_worker() -> None:
     logger.info("Starting Chat Generation Worker...")
     await rabbitmq_manager.initialize()
@@ -75,7 +78,10 @@ async def run_worker() -> None:
     logger.info("Loading AI models and RAG pipeline into memory...")
     qdrant_client = AsyncQdrantClient(url=settings.qdrant_url)
     base_retriever = HybridRetriever(dense=QdrantRetriever(), sparse=BM25Retriever())
-    visual_engine = VisualRetrieverEngine()
+    
+    # NOTE: Model loading is synchronous and blocks the thread. 
+    # This is safe here ONLY because haven't started the RabbitMQ consumer/heartbeat yet.
+    visual_engine = VisualRetrieverEngine() 
     
     multi_retriever = MultimodalRetriever(
         qdrant_client=qdrant_client,
@@ -88,6 +94,7 @@ async def run_worker() -> None:
         retriever=base_retriever,
         multimodal_pipeline=multimodal_pipeline
     )
+    query_rewriter = QueryRewriter()
     logger.info("AI Pipeline loaded successfully.")
 
     channel = await rabbitmq_manager.create_consumer_channel()
@@ -96,18 +103,47 @@ async def run_worker() -> None:
     queues = await setup_queues_and_bindings(channel)
     chat_queue = queues["chat_queue"] 
 
+    # Graceful Shutdown Event
+    shutdown_event = asyncio.Event()
+
+    def handle_shutdown(sig, frame):
+        logger.warning(f"Received termination signal ({sig}). Initiating graceful shutdown...")
+        shutdown_event.set()
+
+    # Register handlers for Docker/Kubernetes (SIGTERM) and local Ctrl+C (SIGINT)
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda s=sig: handle_shutdown(s, None))
+
     logger.info("Chat Worker online. Listening on queue '%s'...", chat_queue.name)
 
-    await chat_queue.consume(
-        lambda msg: process_message(msg, rag_pipeline)
-    )
+    async def on_message(msg):
+        await process_message(msg, rag_pipeline, query_rewriter)
+
+    # Capture the consumer tag so we can cancel it cleanly during shutdown
+    consumer_tag = await chat_queue.consume(on_message)
 
     try:
-        await asyncio.Future()
+        #Wait for the OS signal instead of hanging infinitely
+        await shutdown_event.wait()
     finally:
+        logger.info("Graceful shutdown initiated. Stopping new message consumption...")
+        #Stop accepting new chat jobs
+        await chat_queue.cancel(consumer_tag)
+        
+        #Close ML resources
+        await query_rewriter.close()
         await rag_pipeline.close()
+        if qdrant_client:
+            await qdrant_client.close()
+            
+        #Close messaging channels
         await channel.close()
         await rabbitmq_manager.close()
+        logger.info("Chat Worker shutdown complete.")
 
 if __name__ == "__main__":
-    asyncio.run(run_worker())
+    try:
+        asyncio.run(run_worker())
+    except KeyboardInterrupt:
+        logger.info("Chat Worker stopped manually.")

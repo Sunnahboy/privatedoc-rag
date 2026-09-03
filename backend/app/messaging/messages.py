@@ -1,6 +1,5 @@
 
 from pydantic import BaseModel, Field
-from typing import Optional
 
 class DocumentIngestMessage(BaseModel):
     """Payload schema for document ingestion jobs."""
@@ -11,4 +10,4 @@ class ChatGenerationMessage(BaseModel):
     message_id: str
     session_id: str
     question: str
-    document_id: Optional[str] = None
+    document_ids: list[str] = []

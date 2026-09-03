@@ -44,7 +44,7 @@ class PDFExtractor(BaseExtractor):
             pipeline_options.do_picture_description = False
             
             pipeline_options.accelerator_options = AcceleratorOptions(
-                num_threads=4, 
+                num_threads=6, 
                 device="cuda"  
             )
             

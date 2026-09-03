@@ -45,12 +45,13 @@ class HybridRetriever(BaseRetriever):
         self,
         query: str,
         top_k: int | None = None,
-        document_id: str | None = None,
+        document_ids: list[str] | None = None, # BUG 1 FIXED: Accept the list
         limit: int = 5,  
         **kwargs
     ) -> RetrievalResult:
         if not query or not query.strip():
             raise RetrievalError("Query cannot be empty")
+        
         if top_k is None:
             limit = settings.top_k_search
         else:
@@ -59,8 +60,6 @@ class HybridRetriever(BaseRetriever):
         if limit <= 0:
             raise RetrievalError("top_k must be greater than zero")
 
-        if limit <= 0:
-            raise RetrievalError("top_k must be greater than zero")
         # Retrieve more candidates so RRF has a richer set to merge.
         candidate_limit = limit * settings.hybrid_candidate_multiplier
 
@@ -68,7 +67,7 @@ class HybridRetriever(BaseRetriever):
             return await self.dense.retrieve(
                 query=query,
                 top_k=candidate_limit,
-                document_id=document_id,
+                document_ids=document_ids, # BUG 2 FIXED: Pass the list directly
             )
 
         async def _sparse_search():
@@ -76,7 +75,7 @@ class HybridRetriever(BaseRetriever):
                 return await self.sparse.retrieve(
                     query=query,
                     top_k=candidate_limit,
-                    document_id=document_id,
+                    document_ids=document_ids, # BUG 3 FIXED: Pass the list directly
                 )
 
         with profile("Hybrid Retrieval"):

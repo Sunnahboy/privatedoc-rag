@@ -15,48 +15,43 @@ import logging
 import json
 from typing import AsyncGenerator
 logger = logging.getLogger(__name__)
-TEXT_TEMPLATE = """You are an expert technical assistant. Answer the question directly using the provided context.
+TEXT_TEMPLATE = """You are an expert technical assistant. Answer directly using the provided context.
 
 <context>
 {context}
 </context>
 
 Instructions:
-1. Base your answer primarily on the context. Connect related ideas across chunks.
-2. If the context does not contain the answer, explicitly state: "The provided documents do not contain this information." before adding general knowledge.
-3. Structure your response using Markdown (bullet points, bold text, code blocks).
-4. Do not use conversational filler or greetings.
+1. Grounding: Rely SOLELY on the provided context. No external knowledge, assumptions, or inferences.
+2. Fallback: If the context lacks the answer, output EXACTLY: "The provided documents do not contain enough information to answer this question." If you can answer, NEVER output this phrase.
+3. Specificity: Describe figures, tables, or sections ONLY if explicitly detailed in the context.
+4. Formatting: Use structured Markdown (bullet points, bolding, code blocks).
+5. Opening: Start immediately with a natural summary sentence answering the core question. Omit robotic filler like "Based on the context...".
 
 Prior Conversation:
 {chat_history}
-
-<context>
-{context}
-</context>
 
 Question:
 {question}
 
 Answer:"""
 
-MULTIMODAL_TEMPLATE = """You are an expert technical assistant. Answer the question using the text context and attached document images.
+
+MULTIMODAL_TEMPLATE = """You are an expert technical assistant. Answer using the text context and attached images.
 
 <context>
 {context}
 </context>
 
 Instructions:
-1. For charts, tables, diagrams, and code snippets, read values and syntax directly from the visual images as the primary source of truth.
-2. Synthesize facts across text chunks and images seamlessly.
-3. Structure your answer using Markdown with proper headings, lists, and code blocks.
-4. Do not use conversational preamble.
+1. Grounding: Rely SOLELY on the provided text and images. No external knowledge or assumptions.
+2. Visual Truth: Treat attached images as the primary source of truth for values, syntax, and charts. Do not substitute visually similar images.
+3. Fallback: If the text and images lack the answer, output EXACTLY: "The provided documents do not contain enough information to answer this question." If you can answer, NEVER output this phrase.
+4. Formatting: Use structured Markdown (headings, lists, code blocks).
+5. Opening: Start immediately with a natural summary sentence answering the core question. Omit robotic filler like "Based on the context...".
 
 Prior Conversation:
 {chat_history}
-
-<context>
-{context}
-</context>
 
 Question:
 {question}
@@ -70,18 +65,21 @@ class OllamaGenerator(BaseGenerator):
     ):
         self.prompt_builder = PromptBuilder(template)
         self.base_url = settings.ollama_url.rstrip("/")
-        self.model = settings.generation_model
+        
+        # Pull both models so we can dynamically route based on payload
+        self.text_model = settings.generation_model
+        self.visual_model = settings.visual_model 
+        
         self.timeout = settings.generation_timeout
-
-        self.client = httpx.AsyncClient(
-            timeout=self.timeout,
-        )
+        self.client = httpx.AsyncClient(timeout=self.timeout)
 
     async def close(self) -> None:
-        await self.client.aclose()
+        """Must be explicitly called by the worker when the job or process terminates."""
+        if not self.client.is_closed:
+            await self.client.aclose()
+
     @staticmethod
     def _to_base64(img: Image.Image, format: str = "JPEG", quality: int = 85) -> str:
-    # Ensure RGB mode for JPEG encoding
         if format == "JPEG" and img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
             
@@ -95,10 +93,13 @@ class OllamaGenerator(BaseGenerator):
         context: list[RetrievedChunk],
         images: list[Image.Image] | None = None,
         chat_history: list[ChatMessage] | None = None,
-            
-    )->AsyncGenerator[dict, None]:
-        """Core generation method: streams response from llm token by token."""
+    ) -> AsyncGenerator[dict, None]:
+        
         active_template = MULTIMODAL_TEMPLATE if images else TEXT_TEMPLATE
+        
+        # THE FIX: Dynamically route to the VLM if images are present
+        active_model = self.visual_model if images else self.text_model
+        
         prompt_builder = PromptBuilder(active_template)
         prompt = prompt_builder.build(
             question=question,
@@ -107,9 +108,10 @@ class OllamaGenerator(BaseGenerator):
         )
 
         payload = {
-            "model": self.model,
+            "model": active_model,
             "prompt": prompt,
             "stream": True,
+            "keep_alive": -1,  # THE FIX: Pin the model in VRAM indefinitely to prevent cold-starts
             "options": {
                 "num_ctx": 8192,
                 "num_predict": 1024,
@@ -117,7 +119,7 @@ class OllamaGenerator(BaseGenerator):
         }
 
         if images:
-            logger.info("Multimodal Stream: Attaching %d image(s)", len(images))
+            logger.info("Multimodal Stream: Routing to %s and attaching %d image(s)", active_model, len(images))
             tasks = [asyncio.to_thread(self._to_base64, img) for img in images]
             payload["images"] = await asyncio.gather(*tasks)
 
@@ -142,7 +144,6 @@ class OllamaGenerator(BaseGenerator):
                             }
                         else:
                             record_ollama_metrics(data)
-                            
                             citations_dict = [
                                 {
                                     "text": chunk.text, 
@@ -150,7 +151,6 @@ class OllamaGenerator(BaseGenerator):
                                     "chunk_index": chunk.chunk_index
                                 } for chunk in context
                             ]
-                            
                             yield {
                                 "type": "done",
                                 "citations": citations_dict,
