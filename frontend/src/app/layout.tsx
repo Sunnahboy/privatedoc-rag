@@ -22,6 +22,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <head>
         {/* Material Symbols */}
@@ -30,6 +31,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet" />
+        {/* Apply the saved theme before paint to avoid a light-theme flash / mismatch on any route */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("privatedoc.theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
