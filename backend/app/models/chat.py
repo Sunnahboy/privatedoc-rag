@@ -20,7 +20,8 @@ class ChatMessage(Base):
     
     # Store which chunks/images the LLM used to answer this specific message
     citations = Column(JSON, default=[]) 
-    
+    # Store the active documents for this specific turn
+    document_ids = Column(JSON, default=[], nullable=False)
     #track rabbitMQ worker
     status = Column(String, default="completed", nullable=False)
     
