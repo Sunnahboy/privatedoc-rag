@@ -103,12 +103,12 @@ export const apiClient = {
      */
     async submitChatJob(
         query: string,
-        documentId?: string,
+        documentIds: string[],
         sessionId?: string | null
     ): Promise<ChatJobResponse> {
         const payload = {
             question: query,
-            document_id: documentId || null,
+            document_ids: documentIds,
             session_id: sessionId || null,
         };
 

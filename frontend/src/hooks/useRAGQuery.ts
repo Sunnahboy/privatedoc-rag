@@ -121,7 +121,7 @@ export function useRAGQuery() {
 
   const askQuestion = async (
     e?: React.SyntheticEvent,
-    selectedDocIds?: string[],
+    documentIds: string[] = [],
     explicitQuery?: string,
     signal?: AbortSignal,
   ): Promise<RagResponse | null> => {
@@ -136,12 +136,11 @@ export function useRAGQuery() {
       setResponse(null); 
       setStatusMessage("Queuing job...");
 
-      const docId = selectedDocIds && selectedDocIds.length > 0 ? selectedDocIds[0] : undefined;
       const currentSessionId = sessionIdRef.current;
       
       const { session_id, user_message_id, assistant_message_id } = await apiClient.submitChatJob(
         q,
-        docId,
+        documentIds,
         currentSessionId
       );
 
@@ -250,5 +249,5 @@ export function useRAGQuery() {
     router.replace(`${pathname}?${newParams.toString()}`);
   };
 
-  return { query, setQuery, isLoading, response, error, askQuestion, handleEditMessage, clearChat, chatHistory, sessionId, statusMessage };
+  return { query, setQuery, isLoading, response, error, setError, askQuestion, handleEditMessage, clearChat, chatHistory, sessionId, statusMessage };
 }

@@ -88,7 +88,7 @@ export function DocumentThumbnail({
     return (
       <div
         ref={hostRef}
-        className="flex h-full items-center justify-center rounded border border-dashed border-outline-variant/40 bg-white/70 text-on-surface-variant"
+        className="flex h-full items-center justify-center rounded border border-dashed border-outline-variant/40 bg-surface-elevated/70 text-on-surface-variant"
       >
         <div className="text-center">
           <p className="text-xs font-semibold tracking-[0.08em]">{getExtension(originalFilename)}</p>
@@ -101,7 +101,7 @@ export function DocumentThumbnail({
   return (
     <div
       ref={hostRef}
-      className="relative flex h-full items-center justify-center overflow-hidden rounded border border-outline-variant/40 bg-[#fdfcf8]"
+      className="relative flex h-full items-center justify-center overflow-hidden rounded border border-outline-variant/40 bg-surface-container-low"
       data-thumbnail-id={documentId}
       onMouseEnter={() => {
         setIsHovered(true);

@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
-import { type Citation } from "@/lib/api-client";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useRAGQuery } from "@/hooks/useRAGQuery";
 
@@ -13,16 +12,14 @@ interface RagChatProps {
   selectedText?: string | null;
   showDocumentSelector?: boolean;
   isExpanded?: boolean;
+  chatFocus?: boolean;
   onToggleExpanded?: () => void;
   className?: string;
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
 const COMPOSER_MAX_HEIGHT = 180;
 const COLLAPSE_THRESHOLD = 950;
+type SearchScope = "current" | "selected" | "all";
 
 function formatMessageTime(createdAt?: string) {
   if (!createdAt) {
@@ -37,14 +34,19 @@ export function RagChat({
   selectedText,
   showDocumentSelector = true,
   isExpanded = false,
+  chatFocus = false,
   onToggleExpanded,
   className,
 }: RagChatProps) {
   // THE FIX: We pull statusMessage directly from the hook now
-  const { query, setQuery, isLoading, askQuestion, error, clearChat, chatHistory, handleEditMessage, statusMessage } = useRAGQuery();
+  const { query, setQuery, isLoading, askQuestion, error, setError, clearChat, chatHistory, handleEditMessage, statusMessage } = useRAGQuery();
   const { documents, isLoading: docsLoading, fetchDocuments } = useDocuments({ autoFetch: showDocumentSelector });
 
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(documentId ?? null);
+  const [checkedDocumentIds, setCheckedDocumentIds] = useState<string[]>(
+    documentId ? [documentId] : [],
+  );
+  const [searchScope, setSearchScope] = useState<SearchScope>("current");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [inlineEditText, setInlineEditText] = useState("");
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
@@ -55,6 +57,16 @@ export function RagChat({
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const submitInFlightRef = useRef(false);
+
+  const activeDocumentIds = useMemo(() => {
+    if (searchScope === "all") {
+      return documents.map((doc) => doc.document_id);
+    }
+    if (searchScope === "selected") {
+      return checkedDocumentIds;
+    }
+    return selectedDocumentId ? [selectedDocumentId] : [];
+  }, [checkedDocumentIds, documents, searchScope, selectedDocumentId]);
 
   // Auto-resize composer
   useEffect(() => {
@@ -144,10 +156,13 @@ export function RagChat({
     abortControllerRef.current = controller;
 
     try {
-      const scopedDocument = documentId ?? selectedDocumentId;
+      if (activeDocumentIds.length === 0) {
+        setError("Select at least one document before sending a question.");
+        return;
+      }
       await askQuestion(
         undefined,
-        scopedDocument ? [scopedDocument] : undefined,
+        activeDocumentIds,
         trimmed,
         controller.signal,
       );
@@ -173,21 +188,21 @@ export function RagChat({
     await handleEditMessage(
       messageId,
       trimmed,
-      selectedDocumentId ? [selectedDocumentId] : undefined,
+      activeDocumentIds,
     );
   };
 
   return (
-    <section className={`flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-[#FCFBF8] shadow-[0_12px_40px_rgba(15,23,42,0.08)] ${className ?? ""}`}>
-      <div className="flex flex-col gap-3 border-b border-outline-variant/20 bg-white/80 px-4 py-3 backdrop-blur">
+    <section className={`flex h-full min-h-0 flex-col overflow-hidden ${chatFocus ? "bg-chat-focus" : "rounded-2xl border border-outline-variant/20 bg-chat-surface shadow-[0_12px_40px_rgba(15,23,42,0.08)]"} ${className ?? ""}`}>
+      <div className={`flex flex-col gap-3 ${chatFocus ? "bg-chat-focus px-4 py-4" : "border-b border-outline-variant/20 bg-surface-elevated/80 px-4 py-3 backdrop-blur"}`}>
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-on-surface">RAG Chat</h2>
-          <div className="flex items-center gap-2">
+          {!chatFocus && <h2 className="text-sm font-semibold text-on-surface">RAG Chat</h2>}
+          <div className="flex flex-wrap items-center gap-2">
             {onToggleExpanded ? (
               <button
                 type="button"
                 onClick={onToggleExpanded}
-                className="rounded-full border border-outline-variant/30 bg-white px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 {isExpanded ? "Collapse ⤡" : "Expand ⤢"}
               </button>
@@ -200,7 +215,7 @@ export function RagChat({
                 clearChat();
               }}
               disabled={isLoading}
-              className="rounded-full border border-outline-variant/30 bg-white px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface-container disabled:opacity-50"
+              className="rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface-container disabled:opacity-50"
             >
               Clear
             </button>
@@ -210,51 +225,112 @@ export function RagChat({
         {!isExpanded && (
           <>
             {showDocumentSelector && (
-              <div className="flex w-full items-center gap-2 rounded-2xl border border-outline-variant/20 bg-surface-container-low/60 px-3 py-2">
-                <label htmlFor="documentSelect" className="shrink-0 text-xs font-medium text-on-surface-variant">
-                  Scope:
-                </label>
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <select
-                    id="documentSelect"
-                    value={selectedDocumentId ?? ""}
-                    onChange={(e) => setSelectedDocumentId(e.target.value || null)}
-                    className="w-full min-w-0 truncate rounded-full border border-outline-variant/30 bg-white px-3 py-1.5 text-xs text-on-surface shadow-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    disabled={docsLoading}
-                  >
-                    <option value="">All documents in Library</option>
-                    {documents.map((doc) => (
-                      <option key={doc.document_id} value={doc.document_id}>
-                        {doc.original_filename}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => void fetchDocuments()}
-                    className="shrink-0 rounded-full border border-outline-variant/30 bg-white px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface-container"
-                  >
-                    Refresh
-                  </button>
-                </div>
+                <div className={`flex w-full flex-col gap-2 rounded-2xl px-1 py-1 ${chatFocus ? "" : "border border-outline-variant/20 bg-surface-container-low/60 sm:px-3 sm:py-2"}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="shrink-0 text-xs font-medium text-on-surface-variant">Search scope:</span>
+                    <button
+                      type="button"
+                      onClick={() => setSearchScope("current")}
+                      className={`rounded-full px-2.5 py-1 text-xs transition-colors ${searchScope === "current" ? "bg-primary text-on-primary" : "bg-surface-elevated text-on-surface-variant hover:bg-surface"}`}
+                    >
+                      This document
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSearchScope("selected")}
+                      className={`rounded-full px-2.5 py-1 text-xs transition-colors ${searchScope === "selected" ? "bg-primary text-on-primary" : "bg-surface-elevated text-on-surface-variant hover:bg-surface"}`}
+                    >
+                      Selected documents
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSearchScope("all")}
+                      className={`rounded-full px-2.5 py-1 text-xs transition-colors ${searchScope === "all" ? "bg-primary text-on-primary" : "bg-surface-elevated text-on-surface-variant hover:bg-surface"}`}
+                    >
+                      All documents
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void fetchDocuments()}
+                      aria-label="Refresh documents"
+                      className="ml-auto shrink-0 rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface-variant transition-colors hover:bg-surface-container"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <label htmlFor="documentSelect" className="shrink-0 text-xs text-on-surface-variant">
+                      Current:
+                    </label>
+                    <select
+                      id="documentSelect"
+                      value={selectedDocumentId ?? ""}
+                      onChange={(e) => {
+                        const nextId = e.target.value || null;
+                        setSelectedDocumentId(nextId);
+                        if (nextId) {
+                          setCheckedDocumentIds((current) => current.includes(nextId) ? current : [...current, nextId]);
+                        }
+                      }}
+                      className="min-w-0 flex-1 truncate rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface shadow-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      disabled={docsLoading}
+                    >
+                      <option value="">Choose a document</option>
+                      {documents.map((doc) => (
+                        <option key={doc.document_id} value={doc.document_id}>
+                          {doc.original_filename}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {searchScope === "selected" && (
+                    <div className="grid max-h-28 gap-1 overflow-y-auto border-t border-outline-variant/15 pt-2 sm:grid-cols-2">
+                      {documents.map((doc) => (
+                        <label key={doc.document_id} className="flex min-w-0 items-center gap-2 text-xs text-on-surface-variant">
+                          <input
+                            type="checkbox"
+                            checked={checkedDocumentIds.includes(doc.document_id)}
+                            onChange={() => setCheckedDocumentIds((current) =>
+                              current.includes(doc.document_id)
+                                ? current.filter((id) => id !== doc.document_id)
+                                : [...current, doc.document_id],
+                            )}
+                            className="accent-primary"
+                          />
+                          <span className="truncate">{doc.original_filename}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {searchScope === "all" && (
+                    <p className="text-xs text-on-surface-variant">
+                      Searching all {documents.length} loaded documents.
+                    </p>
+                  )}
+                  {searchScope === "selected" && checkedDocumentIds.length === 0 && (
+                    <p className="text-xs text-error">Select at least one document.</p>
+                  )}
+                  {searchScope === "current" && !selectedDocumentId && (
+                    <p className="text-xs text-error">Choose a document for this scope.</p>
+                  )}
               </div>
             )}
-            <div className="rounded-2xl border border-outline-variant/20 bg-white/70 px-3 py-2 shadow-sm">
+            <div className="rounded-2xl border border-outline-variant/20 bg-surface-elevated/70 px-3 py-2 shadow-sm">
               <div className="flex flex-wrap items-center gap-2">
                 {/* Action buttons remain unchanged */}
-                <button type="button" onClick={() => runContextAction("Help me understand the main ideas of this book.")} className="rounded-full border border-outline-variant/30 bg-white px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Ask about this book</button>
-                <button type="button" onClick={() => runContextAction(`Explain the key ideas on page ${currentPage ?? 1}.`)} className="rounded-full border border-outline-variant/30 bg-white px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Explain this page</button>
-                <button type="button" disabled={!selectedText?.trim()} onClick={() => runContextAction(`Explain this selection:\n\n${selectedText}`)} className="rounded-full border border-outline-variant/30 bg-white px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" title={selectedText?.trim() ? "Use selected text as context" : "Select text in the document first"}>Explain selection</button>
-                <button type="button" onClick={() => runContextAction("Summarize this section in a concise way.")} className="rounded-full border border-outline-variant/30 bg-white px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Summarize this section</button>
-                <button type="button" onClick={() => runContextAction("Compare this section with another section and explain the key differences.")} className="rounded-full border border-outline-variant/30 bg-white px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Compare with another section</button>
+                <button type="button" onClick={() => runContextAction("Help me understand the main ideas of this book.")} className="rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Ask about this book</button>
+                <button type="button" onClick={() => runContextAction(`Explain the key ideas on page ${currentPage ?? 1}.`)} className="rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Explain this page</button>
+                <button type="button" disabled={!selectedText?.trim()} onClick={() => runContextAction(`Explain this selection:\n\n${selectedText}`)} className="rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" title={selectedText?.trim() ? "Use selected text as context" : "Select text in the document first"}>Explain selection</button>
+                <button type="button" onClick={() => runContextAction("Summarize this section in a concise way.")} className="rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Summarize this section</button>
+                <button type="button" onClick={() => runContextAction("Compare this section with another section and explain the key differences.")} className="rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface-variant shadow-sm transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Compare with another section</button>
               </div>
             </div>
           </>
         )}
       </div>
 
-      <div ref={conversationRef} onScroll={handleScroll} className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#faf8f2_0%,#f7f5ef_100%)] p-4">
-        <div className="space-y-5">
+      <div ref={conversationRef} onScroll={handleScroll} className={`flex-1 overflow-y-auto ${chatFocus ? "bg-chat-focus px-4 py-8 sm:px-8" : "bg-chat-surface p-4"}`}>
+        <div className={`mx-auto space-y-7 ${chatFocus ? "w-full max-w-3xl" : ""}`}>
           {chatHistory.length === 0 && !isLoading && (
             <div className="flex h-full min-h-40 items-center justify-center text-center text-sm text-on-surface-variant">
               Ask about this book to get grounded answers with citations.
@@ -275,16 +351,16 @@ export function RagChat({
 
             return (
               <div key={message.id} className={message.role === "user" ? "group flex justify-end" : "group flex justify-start"}>
-                <div className={editingMessageId === message.id ? "relative w-full max-w-[95%]" : message.role === "user" ? "relative w-fit max-w-[88%] rounded-2xl rounded-br-md border border-outline-variant/20 bg-[#faf9f6] px-4 py-3 text-on-surface shadow-sm" : "relative w-fit max-w-[92%] rounded-2xl rounded-bl-md border border-outline-variant/20 bg-[#faf9f6] px-4 py-3 text-on-surface shadow-sm"}>
+                <div className={editingMessageId === message.id ? "relative w-full max-w-[95%]" : chatFocus ? message.role === "user" ? "relative w-fit max-w-[88%] rounded-3xl bg-surface-container px-5 py-3 text-on-surface" : "relative w-fit max-w-[92%] text-on-surface" : message.role === "user" ? "relative w-fit max-w-[88%] rounded-2xl rounded-br-md border border-outline-variant/20 bg-chat-input px-4 py-3 text-on-surface shadow-sm" : "relative w-fit max-w-[92%] rounded-2xl rounded-bl-md border border-outline-variant/20 bg-chat-input px-4 py-3 text-on-surface shadow-sm"}>
                   <div className="flex flex-col gap-1">
                     <div className="min-w-0 break-words">
                       {isAiMessage ? (
                         <div className={`relative ${canCollapse && !isExpandedMessage ? "max-h-72 overflow-hidden" : ""}`}>
-                          <div className="prose prose-sm max-w-none text-on-surface prose-p:leading-6 prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-4 prose-a:text-primary">
+                          <div className="prose prose-sm max-w-none text-on-surface prose-p:leading-6 prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-on-surface prose-p:text-on-surface prose-strong:text-on-surface prose-b:text-on-surface prose-em:text-on-surface prose-ul:text-on-surface prose-ol:text-on-surface prose-li:text-on-surface prose-li:marker:text-on-surface-variant prose-a:text-primary prose-code:text-primary prose-code:bg-surface-container-low prose-pre:bg-surface-container-low prose-pre:text-on-surface prose-blockquote:border-primary prose-blockquote:text-on-surface-variant prose-table:border-outline-variant prose-th:border-outline-variant prose-th:text-on-surface prose-td:border-outline-variant prose-td:text-on-surface-variant prose-hr:border-outline-variant">
                             <ReactMarkdown>{message.content}</ReactMarkdown>
                           </div>
                           {canCollapse && !isExpandedMessage && (
-                            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-white to-transparent" />
+                            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-chat-focus to-transparent" />
                           )}
                         </div>
                       ) : editingMessageId === message.id ? (
@@ -300,7 +376,7 @@ export function RagChat({
                               }
                             }}
                             rows={1}
-                            className="w-full resize-none rounded-[24px] border border-primary/40 bg-[#faf9f6] p-4 text-sm leading-6 text-on-surface shadow-none transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                            className="w-full resize-none rounded-[24px] border border-primary/40 bg-chat-input p-4 text-sm leading-6 text-on-surface shadow-none transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                           />
                           <div className="mt-2 flex items-center justify-end gap-4">
                             <button type="button" onClick={cancelInlineEdit} className="text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface focus-visible:outline-none">Cancel</button>
@@ -319,18 +395,27 @@ export function RagChat({
                     )}
 
                     {message.role === "assistant" && message.citations && message.citations.length > 0 && (
-                      <div className="mt-3 space-y-2 text-xs text-on-surface-variant">
-                        <p className="font-medium text-on-surface">Sources</p>
-                        {message.citations.map((citation, index) => (
-                          <div key={`${message.id}-${index}`} className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span>Chunk {citation.chunk_index}</span>
-                              <span>Score {citation.score.toFixed(3)}</span>
-                            </div>
-                            <p className="mt-1 line-clamp-2 text-xs">“{citation.text}”</p>
-                          </div>
-                        ))}
-                      </div>
+                      <details className="mt-4 text-xs text-on-surface-variant">
+                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium text-on-surface-variant hover:text-primary">
+                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[11px] text-primary">
+                            {message.citations.length}
+                          </span>
+                          Sources
+                          <span className="material-symbols-outlined text-[15px]">expand_more</span>
+                        </summary>
+                        <div className="mt-2 space-y-2 pl-1">
+                          {message.citations.map((citation, index) => (
+                            <details key={`${message.id}-${index}`} className="rounded-lg bg-surface-container-low px-2.5 py-2">
+                              <summary className="cursor-pointer list-none text-on-surface-variant">
+                                <span className="mr-2 text-primary">[{index + 1}]</span>
+                                Source · chunk {citation.chunk_index}
+                              </summary>
+                              <p className="mt-2 leading-5 text-on-surface-variant/80">“{citation.text}”</p>
+                              <p className="mt-1 text-[10px] text-on-surface-variant/60">Relevance {citation.score.toFixed(3)}</p>
+                            </details>
+                          ))}
+                        </div>
+                      </details>
                     )}
 
                     {editingMessageId !== message.id && (
@@ -359,15 +444,15 @@ export function RagChat({
           )}
 
           {error && (
-            <div className="rounded-md border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+            <div className="rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">{error}</div>
           )}
         </div>
       </div>
 
-      <div className="border-t border-outline-variant/20 bg-white/85 p-4 backdrop-blur">
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-2">
+      <div className={`${chatFocus ? "bg-chat-focus px-4 pb-5 pt-3 sm:px-8" : "border-t border-outline-variant/20 bg-surface-elevated/85 p-4 backdrop-blur"}`}>
+        <form onSubmit={(e) => void handleSubmit(e)} className={`mx-auto space-y-2 ${chatFocus ? "w-full max-w-3xl" : ""}`}>
           <label htmlFor="rag-chat-composer" className="sr-only">Ask a question about this book</label>
-          <div className="flex items-end gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low/50 p-2 shadow-sm">
+          <div className={`flex items-end gap-3 rounded-3xl p-2 ${chatFocus ? "border border-outline-variant/20 bg-surface-elevated shadow-[0_4px_20px_rgba(0,0,0,0.08)]" : "border border-outline-variant/20 bg-surface-container-low/50 shadow-sm"}`}>
             <div className="relative flex-1">
               <textarea
                 id="rag-chat-composer"
@@ -383,9 +468,9 @@ export function RagChat({
                   }
                 }}
                 placeholder={editingMessageId ? "Edit your message and press Enter to update" : "Ask about this book..."}
-                className="max-h-45 w-full resize-none rounded-2xl border border-transparent bg-white/90 px-3 py-2 pr-12 text-sm leading-6 text-on-surface shadow-sm transition-colors placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="max-h-45 w-full resize-none rounded-2xl border border-transparent bg-transparent px-3 py-2 pr-12 text-sm leading-6 text-on-surface shadow-none transition-colors placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
-              <button type="button" disabled className="absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-outline-variant/30 bg-white/90 text-on-surface-variant opacity-60 shadow-sm"><span className="material-symbols-outlined text-[18px]">mic</span></button>
+              <button type="button" disabled className="absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-outline-variant/30 bg-surface-elevated/90 text-on-surface-variant opacity-60 shadow-sm"><span className="material-symbols-outlined text-[18px]">mic</span></button>
             </div>
             <button
               type="button"
@@ -395,7 +480,7 @@ export function RagChat({
               }}
               disabled={!isLoading && !query.trim()}
               className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-on-primary shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-                isLoading ? "border-red-600 bg-red-600 hover:bg-red-700" : query.trim() ? "border-primary bg-primary hover:bg-primary/90" : "cursor-not-allowed border-outline bg-outline text-on-surface-variant"
+                isLoading ? "border-error bg-error hover:bg-error/90" : query.trim() ? "border-primary bg-primary hover:bg-primary/90" : "cursor-not-allowed border-outline bg-outline text-on-surface-variant"
               }`}
             >
               <span className="material-symbols-outlined text-[20px]">{isLoading ? "stop" : "arrow_upward"}</span>

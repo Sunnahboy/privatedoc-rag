@@ -1,4 +1,7 @@
+import { useState } from "react";
+
 import { DocumentListItem, normalizeDocumentStatus } from "@/lib/api-client";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface DocumentListProps {
   documents: DocumentListItem[];
@@ -14,12 +17,12 @@ function getStatusChipClass(status: string): string {
   const normalizedStatus = normalizeDocumentStatus(status);
 
   if (normalizedStatus === "indexed") {
-    return "bg-green-100 text-green-700";
+    return "bg-success-container text-success";
   }
   if (normalizedStatus === "failed") {
-    return "bg-red-100 text-red-700";
+    return "bg-error/10 text-error";
   }
-  return "bg-amber-100 text-amber-700";
+  return "bg-warning-container text-warning";
 }
 
 export function DocumentList({
@@ -31,9 +34,12 @@ export function DocumentList({
   onOpenDocument,
   showSelection = false,
 }: DocumentListProps) {
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const pendingDeleteDoc = documents.find((doc) => doc.document_id === pendingDeleteId) ?? null;
+
   if (isLoading) {
     return (
-      <div className="divide-y divide-outline-variant/20 rounded-lg border border-outline-variant/20 bg-white">
+      <div className="divide-y divide-outline-variant/20 rounded-lg border border-outline-variant/20 bg-surface-elevated">
         {Array.from({ length: 5 }).map((_, index) => (
           <div key={`doc-skeleton-${index}`} className="animate-pulse px-4 py-3">
             <div className="h-4 w-2/5 rounded bg-surface-container" />
@@ -49,7 +55,7 @@ export function DocumentList({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-outline-variant/20 bg-white">
+    <div className="overflow-hidden rounded-lg border border-outline-variant/20 bg-surface-elevated">
       {documents.map((doc) => {
         const selected = selectedIds.includes(doc.document_id);
         const normalizedStatus = normalizeDocumentStatus(doc.status);
@@ -59,7 +65,7 @@ export function DocumentList({
           <div
             key={doc.document_id}
             className={`flex items-start gap-3 border-b border-outline-variant/20 px-4 py-3 transition-colors last:border-b-0 ${
-              selected ? "bg-primary/5" : "bg-white hover:bg-surface-container-low/50"
+              selected ? "bg-primary/5" : "bg-surface-elevated hover:bg-surface-container"
             }`}
           >
             {showSelection && onToggleSelection && (
@@ -98,7 +104,7 @@ export function DocumentList({
                 <button
                   type="button"
                   onClick={() => onOpenDocument(doc.document_id)}
-                  className="rounded-md border border-outline-variant/30 px-2 py-1 text-xs text-on-surface transition-colors hover:bg-surface"
+                  className="rounded-md border border-outline-variant/30 px-2 py-1 text-xs text-on-surface transition-colors hover:bg-surface-container"
                 >
                   Open
                 </button>
@@ -106,12 +112,8 @@ export function DocumentList({
 
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm("Are you sure you want to delete this document?")) {
-                    onDeleteDocument(doc.document_id);
-                  }
-                }}
-                className="rounded p-1.5 text-on-surface-variant transition-colors hover:bg-red-50 hover:text-red-600"
+                onClick={() => setPendingDeleteId(doc.document_id)}
+                className="rounded p-1.5 text-on-surface-variant transition-colors hover:bg-error/10 hover:text-error"
                 title="Delete document"
                 aria-label={`Delete ${doc.original_filename}`}
               >
@@ -123,6 +125,25 @@ export function DocumentList({
           </div>
         );
       })}
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="Delete this document?"
+        description={
+          pendingDeleteDoc
+            ? `"${pendingDeleteDoc.original_filename}" will be permanently removed from your library.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          if (pendingDeleteId) {
+            onDeleteDocument(pendingDeleteId);
+          }
+          setPendingDeleteId(null);
+        }}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }
