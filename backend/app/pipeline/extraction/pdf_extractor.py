@@ -1,26 +1,34 @@
 # app/pipeline/extraction/pdf_extractor.py
+import asyncio
 import logging
+import tempfile
 from pathlib import Path
 from threading import Lock
-import tempfile
-import asyncio
+
 import fitz  # PyMuPDF
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import PdfPipelineOptions, AcceleratorOptions,TableFormerMode
 from docling.datamodel.base_models import InputFormat
-from docling.document_converter import DocumentConverter
+from docling.datamodel.pipeline_options import (
+    AcceleratorOptions,
+    PdfPipelineOptions,
+    TableFormerMode,
+)
+from docling.document_converter import DocumentConverter, PdfFormatOption
+
 from .base import BaseExtractor
 from .models import ExtractionResult
 
 logger = logging.getLogger(__name__)
 
+
 class PDFExtractor(BaseExtractor):
     # Class-level variables to hold Docling in memory
     _converter_instance = None
     _converter_lock = Lock()
+
     def __init__(self, **kwargs):
         self._initialize_converter()
         self.converter = self.__class__._converter_instance
+
     @classmethod
     def _initialize_converter(cls):
         # If it's already loaded, exit immediately
@@ -32,28 +40,29 @@ class PDFExtractor(BaseExtractor):
             if cls._converter_instance is not None:
                 return
 
-            logger.info("Initializing Docling DocumentConverter (CPU Mode) for the first time...")
-            
+            logger.info(
+                "Initializing Docling DocumentConverter (CPU Mode) for the first time..."
+            )
+
             pipeline_options = PdfPipelineOptions()
-            pipeline_options.do_ocr = False 
+            pipeline_options.do_ocr = False
             pipeline_options.do_table_structure = True
             pipeline_options.table_structure_options.mode = TableFormerMode.FAST
             pipeline_options.do_code_enrichment = False
             pipeline_options.do_formula_enrichment = False
             pipeline_options.do_picture_classification = False
             pipeline_options.do_picture_description = False
-            
+
             pipeline_options.accelerator_options = AcceleratorOptions(
-                num_threads=6, 
-                device="cuda"  
+                num_threads=6, device="cuda"
             )
-            
+
             # Apply options to the converter and cache it at the class level
             cls._converter_instance = DocumentConverter(
                 allowed_formats=[InputFormat.PDF],
                 format_options={
                     InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-                }
+                },
             )
             logger.info("Docling loaded successfully!")
 

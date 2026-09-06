@@ -1,4 +1,5 @@
 import pytest
+
 from app.pipeline.embeddings.base import BaseEmbedder
 
 

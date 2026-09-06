@@ -1,8 +1,9 @@
 from app.config import settings
 
 from .base import BaseEmbedder
-from .ollama_embedder import OllamaEmbedder
 from .fastembed_embedder import FastEmbedEmbedder
+from .ollama_embedder import OllamaEmbedder
+
 
 def create_embedder() -> BaseEmbedder:
     """

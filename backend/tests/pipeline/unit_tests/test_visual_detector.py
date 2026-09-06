@@ -4,6 +4,7 @@ Unit tests for VisualRichDetector heuristic calculations.
 
 import fitz
 import pytest
+
 from app.pipeline.detector.models import PageClassification
 from app.pipeline.detector.visual_detector import DetectorConfig, VisualRichDetector
 

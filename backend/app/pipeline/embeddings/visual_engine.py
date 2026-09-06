@@ -4,17 +4,19 @@ Generates late-interaction multi-vector embeddings for document pages.
 """
 
 import logging
+import os
 from threading import Lock
 from typing import Any
-import os
+
 import numpy as np
 import torch
 
 # Import the ColPali architecture and processor
 from colpali_engine.models import ColQwen2, ColQwen2Processor
+from huggingface_hub import snapshot_download
 from PIL import Image
 from transformers import BitsAndBytesConfig
-from huggingface_hub import snapshot_download
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,14 +60,20 @@ class VisualRetrieverEngine:
 
                 # THE FIX: Auto-Download Logic
                 # Check if the directory exists AND is not empty
-                if not os.path.exists(cls.LOCAL_MODEL_PATH) or not os.listdir(cls.LOCAL_MODEL_PATH):
-                    logger.warning(f"Model weights not found at {cls.LOCAL_MODEL_PATH}.")
-                    logger.info(f"Initiating auto-download from {cls.HUB_MODEL_NAME}. This will take a while...")
+                if not os.path.exists(cls.LOCAL_MODEL_PATH) or not os.listdir(
+                    cls.LOCAL_MODEL_PATH
+                ):
+                    logger.warning(
+                        f"Model weights not found at {cls.LOCAL_MODEL_PATH}."
+                    )
+                    logger.info(
+                        f"Initiating auto-download from {cls.HUB_MODEL_NAME}. This will take a while..."
+                    )
                     os.makedirs(cls.LOCAL_MODEL_PATH, exist_ok=True)
                     snapshot_download(
-                        repo_id=cls.HUB_MODEL_NAME, 
+                        repo_id=cls.HUB_MODEL_NAME,
                         local_dir=cls.LOCAL_MODEL_PATH,
-                        local_dir_use_symlinks=False # Forces actual files to be downloaded, not just cache pointers
+                        local_dir_use_symlinks=False,  # Forces actual files to be downloaded, not just cache pointers
                     )
                     logger.info("Download complete!")
 
@@ -83,12 +91,12 @@ class VisualRetrieverEngine:
                         bnb_4bit_compute_dtype=torch.bfloat16,
                         bnb_4bit_use_double_quant=True,
                         bnb_4bit_quant_type="nf4",
-                        llm_int8_enable_fp32_cpu_offload=True
+                        llm_int8_enable_fp32_cpu_offload=True,
                     )
                     cls._model_instance = ColQwen2.from_pretrained(
                         cls.LOCAL_MODEL_PATH,
                         quantization_config=quantization_config,
-                        device_map={"": "cuda"}, # Bypass meta tensors
+                        device_map={"": "cuda"},  # Bypass meta tensors
                         local_files_only=True,
                     ).eval()
                     logger.info("Model loaded in 4-bit quantized mode.")

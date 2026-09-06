@@ -1,12 +1,15 @@
 import itertools
 
 import pytest
+
 from app.pipeline.chunking.recursive_chunker import RecursiveChunker
 from app.pipeline.cleaning.models import CleaningResult
 
 
 def clean(text: str) -> CleaningResult:
-    return CleaningResult(pages=[text],)
+    return CleaningResult(
+        pages=[text],
+    )
 
 
 # ==========================================================

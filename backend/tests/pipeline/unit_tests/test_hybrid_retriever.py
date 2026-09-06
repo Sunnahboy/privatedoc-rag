@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+
 from app.config import settings
 from app.pipeline.retrieval.exceptions import RetrievalError, SearchError
 from app.pipeline.retrieval.hybrid_retriever import HybridRetriever

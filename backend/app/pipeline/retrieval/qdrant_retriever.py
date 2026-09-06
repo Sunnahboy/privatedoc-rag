@@ -1,11 +1,12 @@
 from typing import Self
 
+from qdrant_client import AsyncQdrantClient
+from qdrant_client.models import FieldCondition, Filter, MatchAny
+
 from app.config import settings
 from app.pipeline.embeddings.base import BaseEmbedder
 from app.pipeline.embeddings.factory import create_embedder
 from app.utils.profiler import profile
-from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import FieldCondition, Filter, MatchValue,MatchAny
 
 from .exceptions import RetrievalError, SearchError
 from .interface import BaseRetriever
@@ -48,7 +49,10 @@ class QdrantRetriever(BaseRetriever):
         await self.client.close()
 
     async def retrieve(
-        self, query: str, top_k: int | None = None, document_ids: list[str] | None = None
+        self,
+        query: str,
+        top_k: int | None = None,
+        document_ids: list[str] | None = None,
     ) -> RetrievalResult:
         """
         Retrieve the top-k most relevant chunks for a query.

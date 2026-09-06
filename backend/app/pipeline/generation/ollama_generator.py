@@ -1,19 +1,23 @@
+import asyncio
+import base64
+import json
+import logging
+from collections.abc import AsyncGenerator
+from io import BytesIO
+
 import httpx
+from PIL import Image
+
 from app.config import settings
+from app.models.chat import ChatMessage
 from app.pipeline.retrieval.models import RetrievedChunk
 from app.utils.profiler import record_ollama_metrics
-import base64
-from io import BytesIO
-from PIL import Image
+
 from .exceptions import GenerationError
 from .interface import BaseGenerator
 from .models import GenerateResult
 from .prompt_builder import PromptBuilder
-import asyncio
-from app.models.chat import ChatMessage
-import logging
-import json
-from typing import AsyncGenerator
+
 logger = logging.getLogger(__name__)
 TEXT_TEMPLATE = """You are an expert technical assistant. Answer directly using the provided context.
 
@@ -58,6 +62,7 @@ Question:
 
 Answer:"""
 
+
 class OllamaGenerator(BaseGenerator):
     def __init__(
         self,
@@ -65,11 +70,11 @@ class OllamaGenerator(BaseGenerator):
     ):
         self.prompt_builder = PromptBuilder(template)
         self.base_url = settings.ollama_url.rstrip("/")
-        
+
         # Pull both models so we can dynamically route based on payload
         self.text_model = settings.generation_model
-        self.visual_model = settings.visual_model 
-        
+        self.visual_model = settings.visual_model
+
         self.timeout = settings.generation_timeout
         self.client = httpx.AsyncClient(timeout=self.timeout)
 
@@ -82,7 +87,7 @@ class OllamaGenerator(BaseGenerator):
     def _to_base64(img: Image.Image, format: str = "JPEG", quality: int = 85) -> str:
         if format == "JPEG" and img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
-            
+
         buf = BytesIO()
         img.save(buf, format=format, quality=quality, optimize=False)
         return base64.b64encode(buf.getbuffer()).decode("utf-8")
@@ -94,12 +99,12 @@ class OllamaGenerator(BaseGenerator):
         images: list[Image.Image] | None = None,
         chat_history: list[ChatMessage] | None = None,
     ) -> AsyncGenerator[dict, None]:
-        
+
         active_template = MULTIMODAL_TEMPLATE if images else TEXT_TEMPLATE
-        
+
         # THE FIX: Dynamically route to the VLM if images are present
         active_model = self.visual_model if images else self.text_model
-        
+
         prompt_builder = PromptBuilder(active_template)
         prompt = prompt_builder.build(
             question=question,
@@ -119,55 +124,60 @@ class OllamaGenerator(BaseGenerator):
         }
 
         if images:
-            logger.info("Multimodal Stream: Routing to %s and attaching %d image(s)", active_model, len(images))
+            logger.info(
+                "Multimodal Stream: Routing to %s and attaching %d image(s)",
+                active_model,
+                len(images),
+            )
             tasks = [asyncio.to_thread(self._to_base64, img) for img in images]
             payload["images"] = await asyncio.gather(*tasks)
 
         try:
             async with self.client.stream(
-                "POST", 
-                f"{self.base_url}/api/generate", 
-                json=payload
+                "POST", f"{self.base_url}/api/generate", json=payload
             ) as response:
                 response.raise_for_status()
-                
+
                 async for line in response.aiter_lines():
                     if not line:
                         continue
-                    
+
                     try:
                         data = json.loads(line)
                         if not data.get("done"):
-                            yield {
-                                "type": "token",
-                                "content": data.get("response", "")
-                            }
+                            yield {"type": "token", "content": data.get("response", "")}
                         else:
                             record_ollama_metrics(data)
                             citations_dict = [
                                 {
-                                    "text": chunk.text, 
-                                    "score": chunk.score, 
-                                    "chunk_index": chunk.chunk_index
-                                } for chunk in context
+                                    "text": chunk.text,
+                                    "score": chunk.score,
+                                    "chunk_index": chunk.chunk_index,
+                                }
+                                for chunk in context
                             ]
                             yield {
                                 "type": "done",
                                 "citations": citations_dict,
                                 "prompt_tokens": data.get("prompt_eval_count", 0),
                                 "completion_tokens": data.get("eval_count", 0),
-                                "prompt_chars": len(prompt)
+                                "prompt_chars": len(prompt),
                             }
                     except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse streaming line from Ollama: {line}")
+                        logger.warning(
+                            f"Failed to parse streaming line from Ollama: {line}"
+                        )
                         continue
 
         except httpx.HTTPStatusError as exc:
-            raise GenerationError(exc.response.json().get("error", "Unknown error")) from exc
+            raise GenerationError(
+                exc.response.json().get("error", "Unknown error")
+            ) from exc
         except httpx.HTTPError as exc:
-            raise GenerationError("Failed to communicate with Ollama during stream.") from exc
+            raise GenerationError(
+                "Failed to communicate with Ollama during stream."
+            ) from exc
 
-    
     async def generate(
         self,
         question: str,
@@ -175,18 +185,18 @@ class OllamaGenerator(BaseGenerator):
         images: list[Image.Image] | None = None,
         chat_history: list[ChatMessage] | None = None,
     ) -> GenerateResult:
-
         """
         Non-streaming wrapper. Accumulates the stream and returns a single GenerateResult.
         """
         text_buffer: list[str] = []
         done_metadata: dict = {}
 
-        
         # Consume the stream internally
-        async for chunk in self.generate_stream(question, context, images, chat_history):
+        async for chunk in self.generate_stream(
+            question, context, images, chat_history
+        ):
             chunk_type = chunk.get("type")
-            
+
             if chunk_type == "token":
                 text_buffer.append(chunk.get("content", ""))
             elif chunk_type == "done":

@@ -1,9 +1,13 @@
 import asyncio
+
 from fastembed import TextEmbedding
-from app.pipeline.chunking.models import Chunk
+
 from app.config import settings
+from app.pipeline.chunking.models import Chunk
+
 from .base import BaseEmbedder
 from .models import EmbeddingResult
+
 
 class FastEmbedEmbedder(BaseEmbedder):
     """
@@ -19,21 +23,18 @@ class FastEmbedEmbedder(BaseEmbedder):
     ) -> None:
         self.model_name = model_name or settings.embedding_model
         self.batch_size = batch_size or settings.embedding_batch_size
-        
-        # Limit threads so ONNX doesn't starve FastAPI's async event loop. 
+
+        # Limit threads so ONNX doesn't starve FastAPI's async event loop.
         # If None, it uses default CPU core heuristics.
         self.threads = threads
-        
-        self.model = TextEmbedding(
-            model_name=self.model_name,
-            threads=self.threads
-        )
+
+        self.model = TextEmbedding(model_name=self.model_name, threads=self.threads)
 
     async def embed_query(self, query: str) -> list[float]:
         """
         Embeds a single query vector in 10-30ms without touching the network or GPU.
         """
-        # Use native query_embed(). FastEmbed automatically applies 
+        # Use native query_embed(). FastEmbed automatically applies
         # the correct model-specific prefix (e.g., "query: ") under the hood.
         generator = await asyncio.to_thread(self.model.query_embed, query)
         vector = next(iter(generator))
@@ -48,14 +49,12 @@ class FastEmbedEmbedder(BaseEmbedder):
 
         texts = [chunk.text for chunk in chunks]
 
-        # Use native embed(). FastEmbed automatically handles 
+        # Use native embed(). FastEmbed automatically handles
         # document-side prefixes if the specific model requires them.
         generator = await asyncio.to_thread(
-            self.model.embed, 
-            texts, 
-            batch_size=self.batch_size
+            self.model.embed, texts, batch_size=self.batch_size
         )
-        
+
         vectors = [v.tolist() for v in generator]
 
         results: list[EmbeddingResult] = []
@@ -77,4 +76,3 @@ class FastEmbedEmbedder(BaseEmbedder):
 
     async def close(self) -> None:
         """No-op: Satisfies BaseEmbedder interface as no network sockets exist."""
-        pass
