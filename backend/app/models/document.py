@@ -1,9 +1,11 @@
-from datetime import datetime, timezone
-from typing import Any
 import enum
-from app.database import Base
-from sqlalchemy import Enum, JSON, BigInteger, DateTime, Integer, String
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import JSON, BigInteger, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
+
+from app.database import Base
 
 
 def utc_now() -> datetime:
@@ -14,7 +16,8 @@ def utc_now() -> datetime:
     - UTC timestamps are easier to compare and debug.
     """
 
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
+
 
 class IngestStatus(str, enum.Enum):
     QUEUED = "QUEUED"
@@ -48,16 +51,18 @@ class Document(Base):
     )
 
     storage_provider: Mapped[str] = mapped_column(
-       String(50), default="local", nullable=False
+        String(50), default="local", nullable=False
     )
     storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
 
     # Pipeline State Tracking
     status: Mapped[IngestStatus] = mapped_column(
-       Enum(IngestStatus), default=IngestStatus.QUEUED, nullable=False
+        Enum(IngestStatus), default=IngestStatus.QUEUED, nullable=False
     )
     error_message: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=dict, nullable=True)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, default=dict, nullable=True
+    )
     # Document Structure Metadata
     total_pages: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
