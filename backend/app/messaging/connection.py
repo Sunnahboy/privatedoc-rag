@@ -234,7 +234,7 @@ class RabbitMQManager:
     ) -> None:
         if exc:
             logger.warning(
-                "RabbitMQ connection closed unexpectedly: %s",
+                "RabbitMQ connection closed unexpectedly: %s %s",
                 sender,
                 exc,
             )

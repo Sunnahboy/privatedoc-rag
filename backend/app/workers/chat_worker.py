@@ -1,34 +1,37 @@
 import asyncio
 import logging
 import signal
+
 from aio_pika import IncomingMessage
+from qdrant_client import AsyncQdrantClient
 
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.messaging.connection import rabbitmq_manager
 from app.messaging.messages import ChatGenerationMessage
 from app.messaging.queues import setup_queues_and_bindings
-
-from app.pipeline.retrieval.hybrid_retriever import HybridRetriever
-from app.pipeline.retrieval.bm25_retriever import BM25Retriever
-from app.pipeline.retrieval.qdrant_retriever import QdrantRetriever
-from app.pipeline.embeddings.visual_client import VisualAPIClient
-from qdrant_client import AsyncQdrantClient
-from app.pipeline.retrieval.multimodal_retriever import MultimodalRetriever
-from app.pipeline.retrieval.multimodal_pipeline import MultimodalRetrievalPipeline
 from app.orchestration.rag_pipeline import RAGPipeline
-from app.utils.logging_utils import configure_logging
+from app.pipeline.embeddings.visual_client import VisualAPIClient
+from app.pipeline.retrieval.bm25_retriever import BM25Retriever
+from app.pipeline.retrieval.hybrid_retriever import HybridRetriever
+from app.pipeline.retrieval.multimodal_pipeline import MultimodalRetrievalPipeline
+from app.pipeline.retrieval.multimodal_retriever import MultimodalRetriever
+from app.pipeline.retrieval.qdrant_retriever import QdrantRetriever
 from app.pipeline.retrieval.query_rewriter import QueryRewriter
-from .Chatworker import ChatWorker as CoreChatWorker # Aliased to avoid naming conflict
+from app.utils.logging_utils import configure_logging
+
+from .Chatworker import ChatWorker as CoreChatWorker  # Aliased to avoid naming conflict
 
 configure_logging()
 logger = logging.getLogger(__name__)
 
+
 class ChatGenerationService:
     """
-    
+
     Owns its dependencies natively to prevent scope leaks and nested closures.
     """
+
     def __init__(self):
         self.qdrant_client: AsyncQdrantClient | None = None
         self.visual_engine: VisualAPIClient | None = None
@@ -40,20 +43,19 @@ class ChatGenerationService:
         """RabbitMQ Callback."""
         try:
             payload = ChatGenerationMessage.model_validate_json(message.body)
-        except Exception as e:
+        except Exception as e:#noqa
             logger.critical("Invalid chat message payload dropped: %s", e)
             await message.reject(requeue=False)
             return
 
         should_reject = False
-        
+
         async with AsyncSessionLocal() as db:
             # Instantiate the business logic handler using self-owned dependencies
             worker = CoreChatWorker(
-                rag_pipeline=self.rag_pipeline,
-                query_rewriter=self.query_rewriter
+                rag_pipeline=self.rag_pipeline, query_rewriter=self.query_rewriter
             )
-            
+
             try:
                 logger.info(f"Processing chat job for message {payload.message_id}")
                 await worker.process_chat_job(
@@ -61,13 +63,15 @@ class ChatGenerationService:
                     session_id=payload.session_id,
                     question=payload.question,
                     document_ids=payload.document_ids,
-                    db=db
+                    db=db,
                 )
                 await message.ack()
                 logger.info(f"Successfully finished chat job for {payload.message_id}")
-                
-            except Exception as exc:
-                logger.error("Chat generation failed for %s: %s", payload.message_id, exc)
+
+            except Exception as exc:#noqa
+                logger.error(
+                    "Chat generation failed for %s: %s", payload.message_id, exc
+                )
                 should_reject = True
 
         # Handle retries completely outside of the DB transaction block
@@ -75,21 +79,29 @@ class ChatGenerationService:
             headers = message.headers or {}
             x_death = headers.get("x-death", [])
             retry_count = next(
-                (entry.get("count", 0) for entry in (x_death or []) if entry.get("queue") == settings.CHAT_QUEUE_NAME),
+                (
+                    entry.get("count", 0)
+                    for entry in (x_death or [])
+                    if entry.get("queue") == settings.CHAT_QUEUE_NAME
+                ),
                 0,
             )
 
             if retry_count < settings.MAX_RETRIES:
                 logger.warning(
                     "Rejecting chat job %s for retry (Attempt %d/%d)",
-                    payload.message_id, retry_count + 1, settings.MAX_RETRIES
+                    payload.message_id,
+                    retry_count + 1,
+                    settings.MAX_RETRIES,
                 )
                 await message.reject(requeue=False)
             else:
-                logger.critical("Max retries exceeded for chat job %s. Routing to graveyard.", payload.message_id)
+                logger.critical(
+                    "Max retries exceeded for chat job %s. Routing to graveyard.",
+                    payload.message_id,
+                )
                 await message.ack()
                 await rabbitmq_manager.publish_to_graveyard(message.body)
-
 
     async def run(self) -> None:
         """Initializes infrastructure and enters the consumption loop."""
@@ -98,36 +110,39 @@ class ChatGenerationService:
 
         logger.info("Loading AI models and RAG pipeline into memory...")
         self.qdrant_client = AsyncQdrantClient(url=settings.qdrant_url)
-        base_retriever = HybridRetriever(dense=QdrantRetriever(), sparse=BM25Retriever())
-        
+        base_retriever = HybridRetriever(
+            dense=QdrantRetriever(), sparse=BM25Retriever()
+        )
+
         logger.info("Connecting to Centralized Visual API...")
-        self.visual_engine = VisualAPIClient() 
-        
+        self.visual_engine = VisualAPIClient()
+
         multi_retriever = MultimodalRetriever(
             qdrant_client=self.qdrant_client,
             text_retriever=base_retriever,
-            visual_engine=self.visual_engine
+            visual_engine=self.visual_engine,
         )
         multimodal_pipeline = MultimodalRetrievalPipeline(retriever=multi_retriever)
-        
+
         self.rag_pipeline = RAGPipeline(
-            retriever=base_retriever,
-            multimodal_pipeline=multimodal_pipeline
+            retriever=base_retriever, multimodal_pipeline=multimodal_pipeline
         )
         self.query_rewriter = QueryRewriter()
-        
+
         logger.info("AI Pipeline loaded successfully.")
 
         self.channel = await rabbitmq_manager.create_consumer_channel()
         await self.channel.set_qos(prefetch_count=settings.prefetch_count)
 
         queues = await setup_queues_and_bindings(self.channel)
-        chat_queue = queues["chat_queue"] 
+        chat_queue = queues["chat_queue"]
 
         shutdown_event = asyncio.Event()
 
         def handle_shutdown(sig, frame):
-            logger.warning(f"Received termination signal ({sig}). Initiating graceful shutdown...")
+            logger.warning(
+                f"Received termination signal ({sig}). Initiating graceful shutdown..."
+            )
             shutdown_event.set()
 
         loop = asyncio.get_running_loop()
@@ -142,9 +157,11 @@ class ChatGenerationService:
         try:
             await shutdown_event.wait()
         finally:
-            logger.info("Graceful shutdown initiated. Stopping new message consumption...")
+            logger.info(
+                "Graceful shutdown initiated. Stopping new message consumption..."
+            )
             await chat_queue.cancel(consumer_tag)
-            
+
             if self.query_rewriter:
                 await self.query_rewriter.close()
             if self.rag_pipeline:
@@ -153,12 +170,13 @@ class ChatGenerationService:
                 await self.qdrant_client.close()
             if self.visual_engine:
                 await self.visual_engine.close()
-                
+
             if self.channel:
                 await self.channel.close()
             await rabbitmq_manager.close()
-            
+
             logger.info("Chat Worker shutdown complete.")
+
 
 if __name__ == "__main__":
     try:
