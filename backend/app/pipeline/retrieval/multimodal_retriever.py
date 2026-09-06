@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from app.config import settings
-from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
+from app.pipeline.embeddings.visual_client import VisualAPIClient
 from qdrant_client import AsyncQdrantClient, models
 from app.pipeline.retrieval.hybrid_retriever import HybridRetriever
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ class MultimodalRetriever:
         self,
         qdrant_client: AsyncQdrantClient,
         text_retriever: HybridRetriever,
-        visual_engine: VisualRetrieverEngine,
+        visual_engine: VisualAPIClient,
         visual_collection: str | None = None,
     ):
         self.client = qdrant_client
@@ -44,7 +44,7 @@ class MultimodalRetriever:
         
         # 2. Visual Task (Handles ColQwen2 encoding and Qdrant nearest-neighbor search)
         async def _visual_search():
-            visual_vector = await asyncio.to_thread(self.visual_engine.embed_query, query)
+            visual_vector = await self.visual_engine.embed_query(query)
             doc_filter = models.Filter(
                 must=[
                     models.FieldCondition(
