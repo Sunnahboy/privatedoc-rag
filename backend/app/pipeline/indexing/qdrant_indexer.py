@@ -1,8 +1,8 @@
 import asyncio
-from typing import Self
+import logging
 import uuid
-from app.config import settings
-from app.pipeline.embeddings.models import EmbeddingResult
+from typing import Self
+
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     Distance,
@@ -12,11 +12,16 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
-import logging
+
+from app.config import settings
+from app.pipeline.embeddings.models import EmbeddingResult
+
 from .exceptions import CollectionError, UpsertError
 from .interface import BaseIndexer
 from .models import IndexingRequest, IndexingResult
+
 logger = logging.getLogger(__name__)
+
 
 class QdrantIndexer(BaseIndexer):
     def __init__(
@@ -165,14 +170,16 @@ class QdrantIndexer(BaseIndexer):
                         points_selector=delete_filter,
                         wait=True,
                     )
-                    logger.info(f"Successfully deleted document '{document_id}' from '{collection}'.")
-            except Exception as e:
-                logger.error(
-                    f"Failed to delete document '{document_id}' from '{collection}': {e}", 
-                    exc_info=True
+                    logger.info(
+                        f"Successfully deleted document '{document_id}' from '{collection}'."
+                    )
+            except Exception:
+                logger.exception(
+                    f"Failed to delete document '{document_id}' from '{collection}'",
+                   
                 )
 
         await asyncio.gather(
             _delete_from_collection(self.collection_name),
-            _delete_from_collection(self.visual_collection_name)
+            _delete_from_collection(self.visual_collection_name),
         )

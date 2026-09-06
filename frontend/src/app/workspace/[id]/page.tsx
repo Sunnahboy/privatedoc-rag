@@ -26,6 +26,7 @@ import {
 } from "@/components/documents/reader/readerModel";
 import { API_BASE_URL } from "@/lib/constants";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
+import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext";
 
 const PDFViewer = dynamic(() => import("@/components/documents/PDFViewer"), {
   ssr: false,
@@ -39,6 +40,13 @@ const RagChat = dynamic(() => import("@/components/chat/RagChat").then((mod) => 
   ssr: false,
   loading: () => <div className="p-4 text-sm text-on-surface-variant">Preparing RAG Chat…</div>,
 });
+const ChatHistorySidebar = dynamic(
+  () => import("@/components/chat/ChatHistorySidebar").then((mod) => mod.ChatHistorySidebar),
+  {
+    ssr: false,
+    loading: () => <div className="p-4 text-sm text-on-surface-variant">Loading chats…</div>,
+  },
+);
 
 interface ReaderDocumentResponse {
   original_filename: string;
@@ -143,6 +151,16 @@ function PanelButton({
 export default function WorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
 
+  return (
+    <WorkspaceProvider initialDocumentId={id}>
+      <WorkspacePageContent id={id} />
+    </WorkspaceProvider>
+  );
+}
+
+function WorkspacePageContent({ id }: { id: string }) {
+  const { setActiveDocumentId, isChatSidebarOpen, setIsChatSidebarOpen } = useWorkspace();
+
   const [doc, setDoc] = useState<ReaderDocumentResponse | null>(null);
   const [loadState, setLoadState] = useState<DocumentLoadState>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -155,6 +173,13 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
   const [isRagExpanded, setIsRagExpanded] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<number>>(new Set());
   const [layout, setLayout] = useState(getInitialLayout);
+
+  // The reader's document is the source of truth for activeDocumentId;
+  // keep WorkspaceContext in sync so Chat Focus's "New Chat" defaults to it.
+  useEffect(() => {
+    setActiveDocumentId(id);
+    return () => setActiveDocumentId(null);
+  }, [id, setActiveDocumentId]);
   const [resizeTarget, setResizeTarget] = useState<ResizeTarget>(null);
   const resizeStartRef = useRef<{ target: Exclude<ResizeTarget, null>; position: number; value: number } | null>(null);
 
@@ -367,7 +392,7 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
   const isFocusMode = readingMode === "focus";
   const isChatFocus = readingMode === "study";
   // Modes affect visibility, never the user's saved panel dimensions or preferences.
-  const effectiveTocOpen = !isFocusMode && isTocOpen;
+  const effectiveTocOpen = !isFocusMode && (isChatFocus ? isChatSidebarOpen : isTocOpen);
   const effectiveAiOpen = !isFocusMode && (isChatFocus || isAiOpen);
   const tocPanelClass = isFocusMode || !effectiveTocOpen ? "-translate-x-full" : "translate-x-0";
   const aiPanelClass = isFocusMode || !effectiveAiOpen ? "translate-x-full" : "translate-x-0 w-full sm:w-96";
@@ -380,58 +405,51 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
           style={{ height: layout.headerHeight }}
           className={`relative z-40 shrink-0 overflow-hidden border-b border-outline-variant/20 bg-surface transition-[height] duration-200 ${resizeTarget === "header" ? "transition-none! select-none" : ""}`}
         >
-          <div className="grid h-full grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 md:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <PanelButton
-              label={isTocOpen ? "Hide contents" : "Show contents"}
-              icon="menu_book"
-              active={effectiveTocOpen}
-              onClick={() => setIsTocOpen((current) => !current)}
-            />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold md:text-base">
-              <Link href="/library" className="mr-2 text-on-surface-variant hover:text-primary">
-                Library
+          <div className="relative flex h-full w-full items-center justify-between gap-3 px-4 md:px-6">
+            {/* Zone 1: Left (Navigation) */}
+            <div className="flex min-w-0 items-center gap-4">
+              <Link
+                href="/library"
+                className="flex shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-primary"
+              >
+                <span aria-hidden="true">&larr;</span>
+                Back to Library
               </Link>
-              / {doc.original_filename}
-            </p>
-            <p className={`truncate text-xs text-on-surface-variant ${layout.headerHeight < 68 ? "hidden" : ""}`}>
-              {chapterContext
-                ? `${chapterContext.title} · Page ${currentPage}`
-                : `Page ${currentPage}${doc.total_pages ? ` of ${doc.total_pages}` : ""}`}
-            </p>
-          </div>
-          </div>
+            </div>
 
-          <div className="hidden items-center gap-0 overflow-hidden rounded-lg border border-outline-variant/30 bg-surface-elevated shadow-sm lg:flex">
-            <PanelButton
-              label="Full View"
-              icon="import_contacts"
-              active={readingMode === "normal"}
-              onClick={() => applyReadingMode("normal")}
-            />
-            <PanelButton
-              label="Document Focus"
-              icon="center_focus_strong"
-              onClick={() => applyReadingMode("focus")}
-            />
-            <PanelButton
-              label="Chat Focus"
-              icon="auto_stories"
-              active={readingMode === "study"}
-              onClick={() => applyReadingMode("study")}
-            />
-          </div>
+            {/* Zone 2: Center (Workspace Modes) */}
+            <div className="absolute left-1/2 flex -translate-x-1/2 items-center justify-center">
+              <div className="hidden items-center gap-0 overflow-hidden rounded-lg border border-outline-variant/30 bg-surface-elevated shadow-sm lg:flex">
+                <PanelButton
+                  label="Full View"
+                  icon="import_contacts"
+                  active={readingMode === "normal"}
+                  onClick={() => applyReadingMode("normal")}
+                />
+                <PanelButton
+                  label="Document Focus"
+                  icon="center_focus_strong"
+                  onClick={() => applyReadingMode("focus")}
+                />
+                <PanelButton
+                  label="Chat Focus"
+                  icon="auto_stories"
+                  active={readingMode === "study"}
+                  onClick={() => applyReadingMode("study")}
+                />
+              </div>
+            </div>
 
-          <div className="flex items-center justify-end gap-2">
-            <PanelButton
-              label={isAiOpen ? "Hide RAG Chat" : "Show RAG Chat"}
-              icon="storage"
-              active={effectiveAiOpen}
-              onClick={() => setIsAiOpen((current) => !current)}
-            />
-            <ThemeSwitcher />
-          </div>
+            {/* Zone 3: Right (Tools) */}
+            <div className="flex items-center gap-4">
+              <ThemeSwitcher />
+              <PanelButton
+                label={isAiOpen ? "Hide RAG Chat" : "Show RAG Chat"}
+                icon="storage"
+                active={effectiveAiOpen}
+                onClick={() => setIsAiOpen((current) => !current)}
+              />
+            </div>
           </div>
           <button
             type="button"
@@ -474,14 +492,27 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
                bg-surface transition-all duration-300 md:relative md:top-auto md:z-0 ${effectiveTocOpen ? "md:w-(--toc-width) md:border-r" : "md:w-0 md:border-r-0"}
                ${resizeTarget === "toc" ? "md:transition-none! md:select-none" : ""} ${tocPanelClass}`}
           >
-          <div className="p-4">
-            <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">
-                Contents
-              </p>
-              <p className="mt-1 text-xs text-on-surface-variant">
-                Navigate by chapter, section, or starting page.
-              </p>
+          <div className={isChatFocus ? "hidden" : "p-4"}>
+            <div className="mb-4 flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">
+                  Contents
+                </p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  Navigate by chapter, section, or starting page.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTocOpen(false)}
+                aria-label="Hide contents"
+                title="Hide contents"
+                className="flex shrink-0 items-center justify-center rounded-lg bg-transparent p-1.5 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              >
+                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+                  left_panel_close
+                </span>
+              </button>
             </div>
 
             <nav className="flex flex-col gap-0.5 pb-10" aria-label="Table of contents">
@@ -541,10 +572,27 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
               )}
             </nav>
           </div>
+          {isChatFocus && (
+            <ChatHistorySidebar activeDocumentId={id} className="absolute inset-0" />
+          )}
           {effectiveTocOpen && (
             <button type="button" aria-label="Resize table of contents" title="Resize table of contents" onPointerDown={(event) => startResize("toc", event)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onKeyDown={(event) => resizeWithKeyboard("toc", event)} className="reader-resize-handle reader-resize-handle-col absolute inset-y-0 right-0 z-40 hidden w-3 cursor-col-resize touch-none md:block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"><span aria-hidden="true" /></button>
           )}
           </aside>
+        )}
+
+        {!isFocusMode && !isChatFocus && !effectiveTocOpen && (
+          <button
+            type="button"
+            onClick={() => setIsTocOpen(true)}
+            aria-label="Show contents"
+            title="Show contents"
+            className="group absolute inset-y-0 left-0 z-20 hidden w-3 items-center justify-center border-r border-outline-variant/20 bg-surface-elevated/60 transition-colors hover:bg-surface-container md:flex"
+          >
+            <span className="material-symbols-outlined text-[16px] text-on-surface-variant transition-colors group-hover:text-on-surface" aria-hidden="true">
+              chevron_right
+            </span>
+          </button>
         )}
 
         <main className={`overflow-hidden transition-[width,opacity] duration-300 ${isChatFocus ? "pointer-events-none w-0 flex-none opacity-0" : "min-w-0 flex-1 opacity-100"}`}>
@@ -579,6 +627,9 @@ export default function WorkspacePage({ params }: { params: Promise<{ id: string
               isExpanded={isRagExpanded}
               onToggleExpanded={() => setIsRagExpanded((current) => !current)}
               chatFocus={isChatFocus}
+              useWorkspaceScope={isChatFocus}
+              isChatSidebarOpen={isChatSidebarOpen}
+              onOpenChatSidebar={() => setIsChatSidebarOpen(true)}
               className="h-full rounded-none border-0"
             />
           </aside>

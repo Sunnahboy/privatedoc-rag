@@ -5,18 +5,21 @@ and high-recall visual routing for multimodal RAG pipelines.
 """
 
 import logging
-from enum import Enum
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
+from enum import Enum
+
 import fitz  # PyMuPDF
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
 
 # --- Mocking the domain models for self-containment ---
 class PageClassification(str, Enum):
     TEXT = "TEXT"
     VISUAL_RICH = "VISUAL_RICH"
     SCAN = "SCAN"
+
 
 class PageVisualSignals(BaseModel):
     page_number: int
@@ -29,6 +32,7 @@ class PageVisualSignals(BaseModel):
     drawing_count: int
     drawing_coverage_ratio: float
     combined_graphic_ratio: float
+
     @property
     def image_area_ratio(self) -> float:
         return self.image_coverage_ratio
@@ -36,6 +40,8 @@ class PageVisualSignals(BaseModel):
     @property
     def drawing_area_ratio(self) -> float:
         return self.drawing_coverage_ratio
+
+
 @dataclass
 class VisualDetectionResult:
     page_number: int
@@ -43,40 +49,78 @@ class VisualDetectionResult:
     should_process_visual: bool
     reasons: list[str]
     signals: PageVisualSignals
+
+
 # --------------------------------------------------------
+
 
 class DetectorConfig(BaseModel):
     """
     Centralized configuration holding all parameters.
     No threshold or multiplier is hardcoded in the detection logic.
     """
+
     # Grid & Precision Configuration
-    grid_resolution: int = Field(default=50, description="N x N resolution for spatial union approximation")
-    coord_epsilon: float = Field(default=1e-6, description="Epsilon offset to avoid off-by-one boundary leaks")
-    text_density_scale: float = Field(default=1000.0, description="Scaling factor for character per area density")
-    
+    grid_resolution: int = Field(
+        default=50, description="N x N resolution for spatial union approximation"
+    )
+    coord_epsilon: float = Field(
+        default=1e-6, description="Epsilon offset to avoid off-by-one boundary leaks"
+    )
+    text_density_scale: float = Field(
+        default=1000.0, description="Scaling factor for character per area density"
+    )
+
     # Background Element Filtering
-    bg_dimension_threshold: float = Field(default=0.95, description="Ratio threshold to classify rectangle as full-page background")
+    bg_dimension_threshold: float = Field(
+        default=0.95,
+        description="Ratio threshold to classify rectangle as full-page background",
+    )
 
     # SCAN Thresholds
-    scan_min_image_coverage: float = Field(default=0.65, description="Min raster image coverage ratio to trigger SCAN")
-    scan_max_text_chars: int = Field(default=250, description="Max character count allowed for SCAN")
+    scan_min_image_coverage: float = Field(
+        default=0.65, description="Min raster image coverage ratio to trigger SCAN"
+    )
+    scan_max_text_chars: int = Field(
+        default=250, description="Max character count allowed for SCAN"
+    )
 
     # VISUAL_RICH: Raster Image Triggers
-    min_significant_image_area_ratio: float = Field(default=0.01, description="Minimum area ratio to filter out icons/spacers")
-    visual_image_coverage_min: float = Field(default=0.12, description="Min image area coverage ratio")
-    visual_multi_image_count: int = Field(default=3, description="Count threshold for multiple images")
-    visual_multi_image_min_coverage: float = Field(default=0.05, description="Min area coverage when multi-image count is met")
+    min_significant_image_area_ratio: float = Field(
+        default=0.01, description="Minimum area ratio to filter out icons/spacers"
+    )
+    visual_image_coverage_min: float = Field(
+        default=0.12, description="Min image area coverage ratio"
+    )
+    visual_multi_image_count: int = Field(
+        default=3, description="Count threshold for multiple images"
+    )
+    visual_multi_image_min_coverage: float = Field(
+        default=0.05, description="Min area coverage when multi-image count is met"
+    )
 
     # VISUAL_RICH: Vector Drawing Triggers
-    visual_drawing_count_min: int = Field(default=150, description="Min vector drawing path count")
-    visual_drawing_coverage_min: float = Field(default=0.15, description="Min vector drawing area coverage ratio")
-    table_safeguard_char_threshold: int = Field(default=1000, description="Character threshold identifying dense text tables")
-    dense_text_drawing_multiplier: float = Field(default=1.5, description="Path count multiplier applied for dense text pages")
+    visual_drawing_count_min: int = Field(
+        default=150, description="Min vector drawing path count"
+    )
+    visual_drawing_coverage_min: float = Field(
+        default=0.15, description="Min vector drawing area coverage ratio"
+    )
+    table_safeguard_char_threshold: int = Field(
+        default=1000, description="Character threshold identifying dense text tables"
+    )
+    dense_text_drawing_multiplier: float = Field(
+        default=1.5, description="Path count multiplier applied for dense text pages"
+    )
 
     # VISUAL_RICH: Low-Text Graphic Triggers
-    low_text_char_threshold: int = Field(default=400, description="Max character threshold for low-text graphic pages")
-    low_text_graphic_coverage_min: float = Field(default=0.08, description="Min combined graphic coverage ratio for low-text pages")
+    low_text_char_threshold: int = Field(
+        default=400, description="Max character threshold for low-text graphic pages"
+    )
+    low_text_graphic_coverage_min: float = Field(
+        default=0.08,
+        description="Min combined graphic coverage ratio for low-text pages",
+    )
 
 
 class CoverageGrid:
@@ -84,7 +128,8 @@ class CoverageGrid:
     Zero-allocation flat bytearray spatial grid.
     Eliminates Python tuple allocations in tight loops.
     """
-    __slots__ = ("resolution", "cell_w", "cell_h", "grid", "total_marked")
+
+    __slots__ = ("cell_h", "cell_w", "grid", "resolution", "total_marked")
 
     def __init__(self, page_width: float, page_height: float, resolution: int = 50):
         self.resolution = resolution
@@ -126,7 +171,10 @@ class VisualRichDetector:
         signals = self._extract_signals(page)
         classification, reasons = self._classify(signals)
 
-        should_process = classification in (PageClassification.VISUAL_RICH, PageClassification.SCAN)
+        should_process = classification in (
+            PageClassification.VISUAL_RICH,
+            PageClassification.SCAN,
+        )
 
         return VisualDetectionResult(
             page_number=page.number + 1,
@@ -148,8 +196,12 @@ class VisualRichDetector:
 
         # Spatial Grids for true union area calculation
         image_grid = CoverageGrid(rect.width, rect.height, self.config.grid_resolution)
-        drawing_grid = CoverageGrid(rect.width, rect.height, self.config.grid_resolution)
-        combined_grid = CoverageGrid(rect.width, rect.height, self.config.grid_resolution)
+        drawing_grid = CoverageGrid(
+            rect.width, rect.height, self.config.grid_resolution
+        )
+        combined_grid = CoverageGrid(
+            rect.width, rect.height, self.config.grid_resolution
+        )
 
         # 2. Raster Image Metrics
         image_infos = page.get_image_info(xrefs=True)
@@ -172,11 +224,14 @@ class VisualRichDetector:
 
         for dwg in drawings:
             dwg_rect = fitz.Rect(dwg["rect"])
-            
+
             # Ignore full-page backgrounds (e.g. presentation slide backgrounds)
-            if dwg_rect.width >= rect.width * 0.95 and dwg_rect.height >= rect.height * 0.95:
+            if (
+                dwg_rect.width >= rect.width * 0.95
+                and dwg_rect.height >= rect.height * 0.95
+            ):
                 continue
-                
+
             drawing_grid.add_rect(dwg_rect, rect)
             combined_grid.add_rect(dwg_rect, rect)
 
@@ -190,38 +245,57 @@ class VisualRichDetector:
             image_coverage_ratio=round(image_grid.coverage_ratio(), 4),
             drawing_count=drawing_count,
             drawing_coverage_ratio=round(drawing_grid.coverage_ratio(), 4),
-            combined_graphic_ratio=round(combined_grid.coverage_ratio(), 4)
+            combined_graphic_ratio=round(combined_grid.coverage_ratio(), 4),
         )
 
     def _classify(self, s: PageVisualSignals) -> tuple[PageClassification, list[str]]:
         reasons: list[str] = []
 
         # RULE 1: SCAN Check (Overrides VISUAL_RICH)
-        if (s.image_coverage_ratio >= self.config.scan_min_image_coverage and 
-            s.text_char_count <= self.config.scan_max_text_chars):
-            reasons.append(f"SCAN: High image coverage ({s.image_coverage_ratio:.1%}) with low text ({s.text_char_count} chars)")
+        if (
+            s.image_coverage_ratio >= self.config.scan_min_image_coverage
+            and s.text_char_count <= self.config.scan_max_text_chars
+        ):
+            reasons.append(
+                f"SCAN: High image coverage ({s.image_coverage_ratio:.1%}) with low text ({s.text_char_count} chars)"
+            )
             return PageClassification.SCAN, reasons
 
         # RULE 2: Raster Images (Diagrams, Photos, Plots)
         if s.image_coverage_ratio >= self.config.visual_image_coverage_min:
-            reasons.append(f"VISUAL: Significant image coverage ({s.image_coverage_ratio:.1%})")
-        elif s.image_count >= self.config.visual_multi_image_count and s.image_coverage_ratio >= 0.05:
+            reasons.append(
+                f"VISUAL: Significant image coverage ({s.image_coverage_ratio:.1%})"
+            )
+        elif (
+            s.image_count >= self.config.visual_multi_image_count
+            and s.image_coverage_ratio >= 0.05
+        ):
             reasons.append(f"VISUAL: Multiple significant images ({s.image_count})")
 
         # RULE 3: Dense Vector Drawings (Architecture Diagrams, Charts)
         # We increase the required vector count if it looks like a dense text table
         is_dense_text = s.text_char_count > self.config.table_safeguard_char_threshold
-        req_drawing_count = self.config.visual_drawing_count_min * (1.5 if is_dense_text else 1.0)
-        
+        req_drawing_count = self.config.visual_drawing_count_min * (
+            1.5 if is_dense_text else 1.0
+        )
+
         if s.drawing_count >= req_drawing_count:
-            reasons.append(f"VISUAL: High vector path count ({s.drawing_count} >= {req_drawing_count})")
+            reasons.append(
+                f"VISUAL: High vector path count ({s.drawing_count} >= {req_drawing_count})"
+            )
         elif s.drawing_coverage_ratio >= self.config.visual_drawing_coverage_min:
-            reasons.append(f"VISUAL: High vector true-area coverage ({s.drawing_coverage_ratio:.1%})")
+            reasons.append(
+                f"VISUAL: High vector true-area coverage ({s.drawing_coverage_ratio:.1%})"
+            )
 
         # RULE 4: Low Text + Graphics (Infographics, Title Slides)
-        if (s.text_char_count <= self.config.low_text_char_threshold and 
-            s.combined_graphic_ratio >= self.config.low_text_graphic_coverage_min):
-            reasons.append(f"VISUAL: Low text ({s.text_char_count} chars) with graphics ({s.combined_graphic_ratio:.1%})")
+        if (
+            s.text_char_count <= self.config.low_text_char_threshold
+            and s.combined_graphic_ratio >= self.config.low_text_graphic_coverage_min
+        ):
+            reasons.append(
+                f"VISUAL: Low text ({s.text_char_count} chars) with graphics ({s.combined_graphic_ratio:.1%})"
+            )
 
         if reasons:
             return PageClassification.VISUAL_RICH, reasons

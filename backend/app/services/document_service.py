@@ -1,6 +1,13 @@
+import logging
 from pathlib import Path
-import fitz
+
 import aiofiles
+import fitz
+from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
 from app.messaging.publisher import publish_ingestion_job
 from app.models.document import Document, IngestStatus
@@ -18,13 +25,9 @@ from app.utils.file_utils import (
 )
 from app.utils.hashing import calculate_upload_stream_hash
 from app.utils.id_id_utils import generate_document_id
-from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-import logging
 
 logger = logging.getLogger(__name__)
+
 
 class DuplicateDocumentError(Exception):
     """Raised when an uploaded document's SHA-256 hash already exists in the database."""
@@ -100,9 +103,9 @@ async def _save_file_to_disk(file: UploadFile, saved_path: Path) -> int:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Uploaded file is empty",
             )
-       
-        # SANITIZE PDF ANNOTATIONS 
-      
+
+        # SANITIZE PDF ANNOTATIONS
+
         try:
             doc = fitz.open(saved_path)
             annotations_removed = 0
@@ -115,14 +118,13 @@ async def _save_file_to_disk(file: UploadFile, saved_path: Path) -> int:
                         page.delete_annot(annot)
                         annotations_removed += 1
                     annot = next_annot
-            
+
             if annotations_removed > 0:
                 doc.save(saved_path, incremental=False, garbage=3, deflate=True)
             doc.close()
-        except Exception as e:
+        except Exception as e:#noqa
             # If it's not a PDF or PyMuPDF fails, skip gracefully
             logger.warning(f"Could not sanitize annotations for {saved_path.name}: {e}")
-        
 
         return total_size
 
@@ -226,7 +228,9 @@ async def save_uploaded_document(
         await file.close()
 
 
-async def get_document_by_id(document_id: str, db: AsyncSession) -> DocumentListItem | None:
+async def get_document_by_id(
+    document_id: str, db: AsyncSession
+) -> DocumentListItem | None:
     """
     Fetch a single document by its ID and return a DocumentListItem schema.
     Used by the frontend polling mechanism to check upload status.
@@ -241,19 +245,22 @@ async def get_document_by_id(document_id: str, db: AsyncSession) -> DocumentList
 
     # Convert ORM model to Pydantic response model to satisfy FastAPI response validation
     return _document_to_list_item(doc)
+
+
 async def validate_document_ids(requested_ids: list[str], db: AsyncSession) -> set[str]:
     """
-    Fetches valid IDs in O(1) network calls. 
+    Fetches valid IDs in O(1) network calls.
     Returns the set of IDs that were NOT found in the database.
     """
     if not requested_ids:
         return set()
-        
+
     stmt = select(Document.id).filter(Document.id.in_(requested_ids))
     result = await db.execute(stmt)
     found_ids = set(result.scalars().all())
-    
+
     return set(requested_ids) - found_ids
+
 
 async def list_documents(db: AsyncSession) -> list[DocumentListItem]:
     """

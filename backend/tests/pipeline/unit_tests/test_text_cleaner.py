@@ -1,4 +1,5 @@
 import pytest
+
 from app.pipeline.cleaning.text_cleaner import TextCleaner
 from app.pipeline.extraction.models import ExtractionResult
 

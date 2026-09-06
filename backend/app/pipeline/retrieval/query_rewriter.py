@@ -1,7 +1,7 @@
-
+import logging
 
 import httpx
-import logging
+
 from app.config import settings
 from app.models.chat import ChatMessage
 
@@ -24,6 +24,7 @@ Conversation:
 Follow-up: {query}
 Standalone:"""
 
+
 class QueryRewriter:
     def __init__(self, timeout: float = 60.0) -> None:
         self.base_url = settings.ollama_url.rstrip("/")
@@ -31,7 +32,9 @@ class QueryRewriter:
         self.model = settings.generation_model
         self.client = httpx.AsyncClient(timeout=timeout)
 
-    async def rewrite(self, query: str, chat_history: list[ChatMessage] | None = None) -> str:
+    async def rewrite(
+        self, query: str, chat_history: list[ChatMessage] | None = None
+    ) -> str:
         # If no history exists, skip inference entirely (0ms latency penalty)
         if not chat_history:
             return query
@@ -42,36 +45,37 @@ class QueryRewriter:
             f"{msg.role.capitalize()}: {msg.content}" for msg in recent_history
         )
 
-        prompt = REWRITE_PROMPT.format(
-            chat_history=formatted_history,
-            query=query
-        )
+        prompt = REWRITE_PROMPT.format(chat_history=formatted_history, query=query)
 
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,  # Non-streaming for instant full-token extraction
-            "keep_alive": -1, # Keep Gemma hot in VRAM
+            "keep_alive": -1,  # Keep Gemma hot in VRAM
             "options": {
-                "temperature": 0.0,    # Deterministic output; eliminates creative hallucination
-                "num_predict": 40,      # Search queries rarely exceed 40 tokens
-            }
+                "temperature": 0.0,  # Deterministic output; eliminates creative hallucination
+                "num_predict": 40,  # Search queries rarely exceed 40 tokens
+            },
         }
 
         try:
-            response = await self.client.post(f"{self.base_url}/api/generate", json=payload)
+            response = await self.client.post(
+                f"{self.base_url}/api/generate", json=payload
+            )
             response.raise_for_status()
             data = response.json()
             rewritten = data.get("response", "").strip().strip('"')
-            
+
             if rewritten:
                 logger.info("Rewrote query: '%s' -> '%s'", query, rewritten)
                 return rewritten
             return query
 
-        except Exception as exc:
+        except Exception:
             # Resiliency: If Ollama times out or errors, fall back to the raw query without crashing
-            logger.exception("Query rewrite fatally crashed! Falling back to original query.")
+            logger.exception(
+                "Query rewrite fatally crashed! Falling back to original query."
+            )
             return query
 
     async def close(self) -> None:

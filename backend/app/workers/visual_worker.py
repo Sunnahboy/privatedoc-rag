@@ -7,10 +7,10 @@ Purpose:
 - Consumes from 'document.visual.queue'.
 """
 
-import uuid
 import asyncio
 import logging
 import signal
+import uuid
 from pathlib import Path
 
 import aio_pika
@@ -22,8 +22,8 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.messaging.connection import rabbitmq_manager
-from app.pipeline.detector.models import DocumentVisualJobMessage
 from app.models.document import Document
+from app.pipeline.detector.models import DocumentVisualJobMessage
 
 # Lightweight HTTP client instead of heavy PyTorch model
 from app.pipeline.embeddings.visual_client import VisualAPIClient
@@ -42,8 +42,10 @@ def render_pdf_page_to_image(file_path: Path, page_number: int) -> Image.Image:
     try:
         doc = fitz.open(file_path)
         if page_number > len(doc):
-            raise ValueError(f"Page {page_number} out of range for document with {len(doc)} pages.")
-        
+            raise ValueError(
+                f"Page {page_number} out of range for document with {len(doc)} pages."
+            )
+
         page = doc[page_number - 1]
         matrix = fitz.Matrix(2.0, 2.0)
         pix = page.get_pixmap(matrix=matrix)
@@ -54,16 +56,18 @@ def render_pdf_page_to_image(file_path: Path, page_number: int) -> Image.Image:
         doc.close()
         return img
     except Exception as exc:
-        logger.error(f"MuPDF rendering error on page {page_number} for {file_path.name}: {exc}")
+        logger.error(
+            f"MuPDF rendering error on page {page_number} for {file_path.name}: {exc}"
+        )
         raise ValueError(f"Corrupted or unrenderable PDF page: {page_number}") from exc
 
 
 class VisualWorker:
     """
-    OOP Encapsulation of the Visual Worker. 
+    OOP Encapsulation of the Visual Worker.
     Eliminates fragile global variables and properly manages connection state.
     """
-    
+
     def __init__(self):
         # State explicitly tied to the instance
         self.qdrant_client: AsyncQdrantClient | None = None
@@ -74,7 +78,7 @@ class VisualWorker:
         """Consumes visual processing tasks and routes them to the centralized API."""
         try:
             payload = DocumentVisualJobMessage.model_validate_json(message.body)
-        except Exception as e:
+        except Exception as e:#noqa
             logger.critical(f"Invalid visual message payload dropped: {e}")
             await message.reject(requeue=False)
             return
@@ -90,7 +94,9 @@ class VisualWorker:
             )
             doc = result.scalars().first()
             if not doc or not doc.stored_filename:
-                logger.error(f"Document {payload.document_id} not found in DB. Dropping job.")
+                logger.error(
+                    f"Document {payload.document_id} not found in DB. Dropping job."
+                )
                 await message.reject(requeue=False)
                 return
 
@@ -112,7 +118,7 @@ class VisualWorker:
             multi_vector = await self.visual_engine.embed_image(image)
 
             point_string_id = f"{payload.document_id}_page_{payload.page_number}"
-            
+
             # Deterministic UUID prevents Qdrant duplicate vectors if the job is rerun
             deterministic_uuid = str(uuid.uuid5(QDRANT_NAMESPACE, point_string_id))
 
@@ -149,13 +155,13 @@ class VisualWorker:
 
         # Initialize clients natively within the class instance
         self.qdrant_client = AsyncQdrantClient(url=settings.qdrant_url)
-        
+
         logger.info("Initializing connection to Centralized Visual API...")
         self.visual_engine = VisualAPIClient()
 
         await rabbitmq_manager.initialize()
         self.channel = await rabbitmq_manager.create_consumer_channel()
-        
+
         # Process 1 page at a time to prevent flooding the microservice lock
         await self.channel.set_qos(prefetch_count=1)
 
@@ -165,7 +171,9 @@ class VisualWorker:
         shutdown_event = asyncio.Event()
 
         def handle_shutdown(sig, frame):
-            logger.warning(f"Received termination signal ({sig}). Initiating graceful shutdown...")
+            logger.warning(
+                f"Received termination signal ({sig}). Initiating graceful shutdown..."
+            )
             shutdown_event.set()
 
         loop = asyncio.get_running_loop()
@@ -173,29 +181,32 @@ class VisualWorker:
             loop.add_signal_handler(sig, lambda s=sig: handle_shutdown(s, None))
 
         logger.info(f"[*] Visual Worker actively listening on '{queue.name}'")
-        
+
         # RabbitMQ strictly passes `message`, so we pass the bound method
         consumer_tag = await queue.consume(self.process_job)
 
         try:
             await shutdown_event.wait()
         finally:
-            logger.info("Graceful shutdown initiated. Stopping new message consumption...")
+            logger.info(
+                "Graceful shutdown initiated. Stopping new message consumption..."
+            )
             await queue.cancel(consumer_tag)
-            
+
             # Clean closure of all network socket pools
             if self.channel:
                 await self.channel.close()
-                
+
             await rabbitmq_manager.close()
 
             if self.qdrant_client:
                 await self.qdrant_client.close()
-                
+
             if self.visual_engine:
                 await self.visual_engine.close()
 
             logger.info("Visual Worker shutdown complete.")
+
 
 if __name__ == "__main__":
     try:

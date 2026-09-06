@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
+import { useWorkspace } from "@/context/WorkspaceContext";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useRAGQuery } from "@/hooks/useRAGQuery";
+import type { ChatScopeType } from "@/lib/api-client";
 
 interface RagChatProps {
   documentId?: string;
@@ -15,11 +17,33 @@ interface RagChatProps {
   chatFocus?: boolean;
   onToggleExpanded?: () => void;
   className?: string;
+  /**
+   * When true, the chat session, its search scope, and document selection
+   * are all sourced from WorkspaceContext instead of local component state.
+   * Used by the Chat Focus workspace so switching documents/sessions in the
+   * sidebar doesn't reset an in-flight conversation.
+   */
+  useWorkspaceScope?: boolean;
+  /** Whether the Chat History sidebar is currently visible (Chat Focus only). */
+  isChatSidebarOpen?: boolean;
+  /** Reopens the Chat History sidebar; renders a header toggle when provided and closed. */
+  onOpenChatSidebar?: () => void;
 }
 
 const COMPOSER_MAX_HEIGHT = 180;
 const COLLAPSE_THRESHOLD = 950;
 type SearchScope = "current" | "selected" | "all";
+
+const SCOPE_TO_UI: Record<ChatScopeType, SearchScope> = {
+  THIS_DOCUMENT: "current",
+  SELECTED_DOCUMENTS: "selected",
+  ALL_DOCUMENTS: "all",
+};
+const UI_TO_SCOPE: Record<SearchScope, ChatScopeType> = {
+  current: "THIS_DOCUMENT",
+  selected: "SELECTED_DOCUMENTS",
+  all: "ALL_DOCUMENTS",
+};
 
 function formatMessageTime(createdAt?: string) {
   if (!createdAt) {
@@ -37,16 +61,58 @@ export function RagChat({
   chatFocus = false,
   onToggleExpanded,
   className,
+  useWorkspaceScope = false,
+  isChatSidebarOpen = true,
+  onOpenChatSidebar,
 }: RagChatProps) {
+  // Workspace context is only consulted when this chat is scope-controlled
+  // (Chat Focus). Reading it unconditionally is safe because the provider
+  // wraps the whole workspace page.
+  const workspace = useWorkspace();
+
+  const {
+    activeChatSessionId,
+    setActiveChatSessionId,
+    chatScope: workspaceScope,
+    setChatScope: setWorkspaceScope,
+    selectedDocumentIds: workspaceSelectedIds,
+    setSelectedDocumentIds: setWorkspaceSelectedIds,
+  } = workspace;
+
   // THE FIX: We pull statusMessage directly from the hook now
-  const { query, setQuery, isLoading, askQuestion, error, setError, clearChat, chatHistory, handleEditMessage, statusMessage } = useRAGQuery();
+  const {
+    query,
+    setQuery,
+    isLoading,
+    askQuestion,
+    error,
+    setError,
+    clearChat,
+    chatHistory,
+    handleEditMessage,
+    statusMessage,
+  } = useRAGQuery(
+    useWorkspaceScope
+      ? { controlledSessionId: activeChatSessionId, onSessionChange: setActiveChatSessionId }
+      : {},
+  );
   const { documents, isLoading: docsLoading, fetchDocuments } = useDocuments({ autoFetch: showDocumentSelector });
 
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(documentId ?? null);
   const [checkedDocumentIds, setCheckedDocumentIds] = useState<string[]>(
     documentId ? [documentId] : [],
   );
-  const [searchScope, setSearchScope] = useState<SearchScope>("current");
+  const [localSearchScope, setLocalSearchScope] = useState<SearchScope>("current");
+
+  const searchScope = useWorkspaceScope ? SCOPE_TO_UI[workspaceScope] : localSearchScope;
+  const setSearchScope = (next: SearchScope) => {
+    if (useWorkspaceScope) {
+      setWorkspaceScope(UI_TO_SCOPE[next]);
+    } else {
+      setLocalSearchScope(next);
+    }
+  };
+
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [inlineEditText, setInlineEditText] = useState("");
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
@@ -59,6 +125,12 @@ export function RagChat({
   const submitInFlightRef = useRef(false);
 
   const activeDocumentIds = useMemo(() => {
+    if (useWorkspaceScope) {
+      if (workspaceScope === "ALL_DOCUMENTS") {
+        return documents.map((doc) => doc.document_id);
+      }
+      return workspaceSelectedIds;
+    }
     if (searchScope === "all") {
       return documents.map((doc) => doc.document_id);
     }
@@ -66,7 +138,16 @@ export function RagChat({
       return checkedDocumentIds;
     }
     return selectedDocumentId ? [selectedDocumentId] : [];
-  }, [checkedDocumentIds, documents, searchScope, selectedDocumentId]);
+  }, [
+    checkedDocumentIds,
+    documents,
+    searchScope,
+    selectedDocumentId,
+    useWorkspaceScope,
+    workspaceScope,
+    workspaceSelectedIds,
+  ]);
+
 
   // Auto-resize composer
   useEffect(() => {
@@ -195,8 +276,23 @@ export function RagChat({
   return (
     <section className={`flex h-full min-h-0 flex-col overflow-hidden ${chatFocus ? "bg-chat-focus" : "rounded-2xl border border-outline-variant/20 bg-chat-surface shadow-[0_12px_40px_rgba(15,23,42,0.08)]"} ${className ?? ""}`}>
       <div className={`flex flex-col gap-3 ${chatFocus ? "bg-chat-focus px-4 py-4" : "border-b border-outline-variant/20 bg-surface-elevated/80 px-4 py-3 backdrop-blur"}`}>
-        <div className="flex items-center justify-between">
-          {!chatFocus && <h2 className="text-sm font-semibold text-on-surface">RAG Chat</h2>}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-2">
+            {chatFocus && !isChatSidebarOpen && onOpenChatSidebar ? (
+              <button
+                type="button"
+                onClick={onOpenChatSidebar}
+                aria-label="Show chat history"
+                title="Show chat history"
+                className="flex shrink-0 items-center justify-center rounded-lg bg-transparent p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              >
+                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+                  dock_to_right
+                </span>
+              </button>
+            ) : null}
+            {!chatFocus && <h2 className="text-sm font-semibold text-on-surface">RAG Chat</h2>}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {onToggleExpanded ? (
               <button
@@ -264,12 +360,16 @@ export function RagChat({
                     </label>
                     <select
                       id="documentSelect"
-                      value={selectedDocumentId ?? ""}
+                      value={(useWorkspaceScope ? workspaceSelectedIds[0] : selectedDocumentId) ?? ""}
                       onChange={(e) => {
                         const nextId = e.target.value || null;
-                        setSelectedDocumentId(nextId);
-                        if (nextId) {
-                          setCheckedDocumentIds((current) => current.includes(nextId) ? current : [...current, nextId]);
+                        if (useWorkspaceScope) {
+                          setWorkspaceSelectedIds(nextId ? [nextId] : []);
+                        } else {
+                          setSelectedDocumentId(nextId);
+                          if (nextId) {
+                            setCheckedDocumentIds((current) => current.includes(nextId) ? current : [...current, nextId]);
+                          }
                         }
                       }}
                       className="min-w-0 flex-1 truncate rounded-full border border-outline-variant/30 bg-surface-elevated px-3 py-1.5 text-xs text-on-surface shadow-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -285,21 +385,36 @@ export function RagChat({
                   </div>
                   {searchScope === "selected" && (
                     <div className="grid max-h-28 gap-1 overflow-y-auto border-t border-outline-variant/15 pt-2 sm:grid-cols-2">
-                      {documents.map((doc) => (
-                        <label key={doc.document_id} className="flex min-w-0 items-center gap-2 text-xs text-on-surface-variant">
-                          <input
-                            type="checkbox"
-                            checked={checkedDocumentIds.includes(doc.document_id)}
-                            onChange={() => setCheckedDocumentIds((current) =>
-                              current.includes(doc.document_id)
-                                ? current.filter((id) => id !== doc.document_id)
-                                : [...current, doc.document_id],
-                            )}
-                            className="accent-primary"
-                          />
-                          <span className="truncate">{doc.original_filename}</span>
-                        </label>
-                      ))}
+                      {documents.map((doc) => {
+                        const isChecked = useWorkspaceScope
+                          ? workspaceSelectedIds.includes(doc.document_id)
+                          : checkedDocumentIds.includes(doc.document_id);
+                        return (
+                          <label key={doc.document_id} className="flex min-w-0 items-center gap-2 text-xs text-on-surface-variant">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (useWorkspaceScope) {
+                                  setWorkspaceSelectedIds(
+                                    isChecked
+                                      ? workspaceSelectedIds.filter((docId) => docId !== doc.document_id)
+                                      : [...workspaceSelectedIds, doc.document_id],
+                                  );
+                                } else {
+                                  setCheckedDocumentIds((current) =>
+                                    current.includes(doc.document_id)
+                                      ? current.filter((id) => id !== doc.document_id)
+                                      : [...current, doc.document_id],
+                                  );
+                                }
+                              }}
+                              className="accent-primary"
+                            />
+                            <span className="truncate">{doc.original_filename}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   )}
                   {searchScope === "all" && (
@@ -307,10 +422,10 @@ export function RagChat({
                       Searching all {documents.length} loaded documents.
                     </p>
                   )}
-                  {searchScope === "selected" && checkedDocumentIds.length === 0 && (
+                  {searchScope === "selected" && (useWorkspaceScope ? workspaceSelectedIds.length === 0 : checkedDocumentIds.length === 0) && (
                     <p className="text-xs text-error">Select at least one document.</p>
                   )}
-                  {searchScope === "current" && !selectedDocumentId && (
+                  {searchScope === "current" && !(useWorkspaceScope ? workspaceSelectedIds[0] : selectedDocumentId) && (
                     <p className="text-xs text-error">Choose a document for this scope.</p>
                   )}
               </div>

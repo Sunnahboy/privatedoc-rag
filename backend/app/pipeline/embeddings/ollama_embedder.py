@@ -1,6 +1,7 @@
 import asyncio
 
 import httpx
+
 from app.config import settings
 from app.pipeline.chunking.models import Chunk
 

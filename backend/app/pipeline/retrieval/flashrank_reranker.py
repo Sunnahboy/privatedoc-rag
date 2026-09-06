@@ -1,6 +1,7 @@
+from flashrank import Ranker, RerankRequest
+
 from app.config import settings
 from app.pipeline.retrieval.models import RetrievedChunk
-from flashrank import Ranker, RerankRequest
 
 from .interface import BaseReranker
 
@@ -9,18 +10,20 @@ class FlashRankReranker(BaseReranker):
     def __init__(self):
         """
         Initializes the ONNX-based cross-encoder once at startup.
-        
-        WHY: 
+
+        WHY:
         - Hardcoding model names or paths in the class breaks the 12-Factor App methodology.
-        - By pulling exclusively from `settings`, you can change models or cache directories 
+        - By pulling exclusively from `settings`, you can change models or cache directories
           via .env without ever touching application logic.
         """
         # The Truth: The class should not guess what model to use. It obeys the config.
         self.model_name = settings.reranker_model
-        
+
         # Initialize the ONNX session once using explicit config paths
-        self.ranker = Ranker(model_name=self.model_name, cache_dir=settings.reranker_cache_dir)
-        
+        self.ranker = Ranker(
+            model_name=self.model_name, cache_dir=settings.reranker_cache_dir
+        )
+
         # Match the exact property name from your Settings class
         self.top_k = settings.top_k_reranker
 
@@ -41,7 +44,7 @@ class FlashRankReranker(BaseReranker):
         # 1. TRUNCATE CANDIDATES
         # CS Principle: Bounding O(N). Cross-encoders are too heavy to run on the entire vector space.
         # We enforce a hard ceiling injected directly from the configuration.
-        candidate_chunks = chunks[:settings.reranker_max_candidates]
+        candidate_chunks = chunks[: settings.reranker_max_candidates]
 
         # 2. FORMAT PASSAGES WITH SAFE LENGTH CAP
         # CS Principle: Bounding O(L^2). Transformer self-attention scales quadratically with sequence length.
@@ -49,7 +52,7 @@ class FlashRankReranker(BaseReranker):
         passages = [
             {
                 "id": chunk.chunk_id,
-                "text": chunk.text[:settings.reranker_max_chars] if chunk.text else "",
+                "text": chunk.text[: settings.reranker_max_chars] if chunk.text else "",
                 "meta": {},
             }
             for chunk in candidate_chunks

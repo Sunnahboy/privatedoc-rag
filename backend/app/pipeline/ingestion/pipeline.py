@@ -5,11 +5,10 @@ from typing import Any
 
 import aio_pika
 import fitz
-from app.config import settings
+
 from app.messaging.connection import rabbitmq_manager
 from app.pipeline.chunking.base import BaseChunker
-from app.pipeline.chunking.fixed_chunker import FixedChunker
-from app.pipeline.chunking.recursive_chunker import RecursiveChunker
+from app.pipeline.chunking.markdown_chunker import MarkdownSemanticChunker
 from app.pipeline.cleaning.base import BaseCleaner
 from app.pipeline.cleaning.text_cleaner import TextCleaner
 from app.pipeline.detector.models import DocumentVisualJobMessage
@@ -20,7 +19,7 @@ from app.pipeline.extraction.factory import ExtractorFactory
 from app.pipeline.indexing.composite_indexer import CompositeIndexer
 from app.pipeline.indexing.interface import BaseIndexer
 from app.pipeline.indexing.models import IndexingRequest
-from app.pipeline.chunking.markdown_chunker import MarkdownSemanticChunker
+
 from .base import BaseIngestionPipeline
 from .exceptions import (
     ChunkingError,
@@ -57,8 +56,7 @@ class IngestionPipeline(BaseIngestionPipeline):
             self.chunker = chunker
         else:
             self.chunker = MarkdownSemanticChunker()
-            
-        
+
         self.embedder = embedder or create_embedder()
         self.indexer = indexer or CompositeIndexer()
         self.visual_detector = visual_detector or VisualRichDetector()

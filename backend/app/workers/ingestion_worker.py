@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import signal
+
 from aio_pika import IncomingMessage
 from sqlalchemy import select
 
@@ -23,6 +24,7 @@ class DocumentIngestionService:
     OOP Encapsulation of the Document Ingestion Worker.
     Ensures safe state management and graceful shutdowns during heavy CPU/IO loads.
     """
+
     def __init__(self):
         self.channel = None
 
@@ -41,7 +43,9 @@ class DocumentIngestionService:
         should_reject = False
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Document).where(Document.id == document_id))
+            result = await db.execute(
+                select(Document).where(Document.id == document_id)
+            )
             doc = result.scalars().first()
 
             if not doc:
@@ -52,7 +56,7 @@ class DocumentIngestionService:
                 logger.info("Document %s is already indexed skipping", document_id)
                 await message.ack()
                 return
-            
+
             stored_filename = doc.stored_filename
             doc.status = IngestStatus.PROCESSING_TEXT
             await db.commit()
@@ -127,15 +131,14 @@ class DocumentIngestionService:
                 await message.ack()
                 await rabbitmq_manager.publish_to_graveyard(message.body)
 
-
     async def run(self) -> None:
         """Starts the standalone worker looping using the RabbitMQ manager."""
         logger.info("Starting ingestion worker...")
-        
+
         await rabbitmq_manager.initialize()
         self.channel = await rabbitmq_manager.create_consumer_channel()
         await self.channel.set_qos(prefetch_count=settings.prefetch_count)
-        
+
         queues = await setup_queues_and_bindings(self.channel)
         main_queue = queues["main_queue"]
 
@@ -143,7 +146,9 @@ class DocumentIngestionService:
 
         # Define the signal handler
         def handle_shutdown(sig, frame):
-            logger.warning(f"Received termination signal ({sig}). Initiating graceful shutdown...")
+            logger.warning(
+                f"Received termination signal ({sig}). Initiating graceful shutdown..."
+            )
             shutdown_event.set()
 
         # Register the signal handlers (Ctrl+C and Docker SIGTERM)
@@ -151,7 +156,9 @@ class DocumentIngestionService:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, lambda s=sig: handle_shutdown(s, None))
 
-        logger.info("Ingestion Worker online. Listening on queue '%s'...", main_queue.name)
+        logger.info(
+            "Ingestion Worker online. Listening on queue '%s'...", main_queue.name
+        )
 
         # Start consuming messages using the bound class method
         consumer_tag = await main_queue.consume(self.process_job)
@@ -160,16 +167,18 @@ class DocumentIngestionService:
             # Wait until a shutdown signal is received
             await shutdown_event.wait()
         finally:
-            logger.info("Graceful shutdown initiated. Stopping new message consumption...")
+            logger.info(
+                "Graceful shutdown initiated. Stopping new message consumption..."
+            )
             # 1. Stop taking new jobs immediately
             await main_queue.cancel(consumer_tag)
-            
+
             # 2. Close channels and connections cleanly
             logger.info("Closing RabbitMQ connections...")
             if self.channel:
                 await self.channel.close()
             await rabbitmq_manager.close()
-            
+
             logger.info("Worker shutdown complete.")
 
 

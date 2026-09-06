@@ -1,11 +1,13 @@
-from pathlib import Path
 import re
+from pathlib import Path
+
+from tantivy import Document, Index, SchemaBuilder
+from tenacity import retry, stop_after_attempt, wait_random_exponential
+
 from app.config import settings
 from app.pipeline.chunking.models import Chunk
 from app.pipeline.retrieval.models import RetrievedChunk
 from app.utils.logging_utils import logging
-from tantivy import Document, Index, SchemaBuilder
-from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from .interface import BaseSparseIndex
 
@@ -70,7 +72,7 @@ class TantivyIndexer(BaseSparseIndex):
             doc.add_text("chunk_id", chunk.chunk_id)
             doc.add_integer("chunk_index", chunk.chunk_index)
             doc.add_text("text", chunk.text)
-            
+
             writer.add_document(doc)
         writer.commit()
         self.index.reload()
@@ -80,14 +82,14 @@ class TantivyIndexer(BaseSparseIndex):
         self,
         query: str,
         top_k: int,
-        document_ids: list[str] | None = None, # THE FIX: Accept list
+        document_ids: list[str] | None = None,  # THE FIX: Accept list
     ) -> list[RetrievedChunk]:
         # Reload so this searcher sees segments committed by any other instance.
         self.index.reload()
         self.searcher = self.index.searcher()
-        
+
         # Remove Lucene special characters that break Tantivy's parser
-        safe_query = re.sub(r'[\+\-\&&\|!(){}[\]^"~*?:\\/]', ' ', query).strip()
+        safe_query = re.sub(r'[\+\-\&&\|!(){}[\]^"~*?:\\/]', " ", query).strip()
         # Fallback to alphanumeric words if empty
         if not safe_query:
             safe_query = query
@@ -95,13 +97,15 @@ class TantivyIndexer(BaseSparseIndex):
         # THE FIX: Construct a valid Boolean OR clause for multiple documents
         if document_ids:
             # Creates: document_id:"doc_1" OR document_id:"doc_2"
-            doc_or_clause = " OR ".join(f'document_id:"{doc_id}"' for doc_id in document_ids)
-            
+            doc_or_clause = " OR ".join(
+                f'document_id:"{doc_id}"' for doc_id in document_ids
+            )
+
             # BUG FIX: Use safe_query here, NOT the raw query!
-            final_query = f'({doc_or_clause}) AND ({safe_query})'
+            final_query = f"({doc_or_clause}) AND ({safe_query})"
         else:
             final_query = safe_query
-            
+
         query_parser, errors = self.index.parse_query_lenient(
             final_query,
             ["document_id", "text"],
@@ -109,12 +113,12 @@ class TantivyIndexer(BaseSparseIndex):
 
         if errors:
             logging.debug("Tantivy query parser recovered from: %s", errors)
-            
+
         hits = self.searcher.search(
             query_parser,
             limit=top_k,
         )
-        
+
         results: list[RetrievedChunk] = []
         for score, doc_address in hits.hits:
             doc = self.searcher.doc(doc_address)
