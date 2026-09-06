@@ -1,26 +1,25 @@
-
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+from app.api.chat import router as chat_router
 from app.api.document import router as documents_router
 from app.api.health import router as health_router
 from app.api.rag_router import router as rag_router
 from app.api.reader_router import router as reader_router
 from app.config import settings
+from app.database import engine
 from app.messaging.connection import rabbitmq_manager
-from app.api.chat import router as chat_router
+from app.messaging.queues import setup_queues_and_bindings
 from app.qdrant import setup_qdrant_collections
 from app.utils.logging_utils import configure_logging
-from app.database import engine
-from app.messaging.queues import setup_queues_and_bindings
+
 configure_logging()
 logger = logging.getLogger(__name__)
-
-
-
 
 
 # A lifespan context manager
@@ -30,8 +29,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Handles backend startup and shutdown tasks.
     """
     logger.info("starting %s v%s", settings.app_name, settings.app_version)
-   
-    #Database initialization
+
+    # Database initialization
     logger.info("Database initialized")
     await setup_qdrant_collections()  # check if 'documents_visual' exists,
     # Initialize RabbitMQ Manager so the channel pool is ready for publishers
@@ -51,7 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Gracefully close connections and drain the pool
     await rabbitmq_manager.close()
-    await engine.dispose()#dispose of the async engine on shutdown
+    await engine.dispose()  # dispose of the async engine on shutdown
 
 
 app = FastAPI(

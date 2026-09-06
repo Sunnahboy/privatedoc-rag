@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Any
 
 import fitz
+from PIL import Image
+
 from app.config import settings
 from app.pipeline.retrieval.multimodal_pipeline import MultimodalRetrievalPipeline
-from PIL import Image
 
 
 class RAGService:
@@ -33,7 +34,7 @@ class RAGService:
             "mode": mode_used,
             "cited_pages": [p[0] for p in result.fused_page_ranks],
             "text_chunks": result.text_chunks,
-            "images": rendered_images,  
+            "images": rendered_images,
         }
 
     def _render_page(self, document_id: str, page_number: int) -> Image.Image:

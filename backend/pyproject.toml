@@ -40,6 +40,16 @@ dependencies = [
     "redis>=8.1.0",
     "fastembed>=0.8.0",
 ]
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends", 
+    "fastapi.Query", 
+    "fastapi.Path", 
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Security"
+]
 [tool.setuptools.packages.find]
 exclude = ["alembic*"]
 [tool.uv]
