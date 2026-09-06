@@ -49,6 +49,16 @@ export interface RagResponse {
     citations: Citation[];
 }
 
+export type ChatScopeType = "THIS_DOCUMENT" | "SELECTED_DOCUMENTS" | "ALL_DOCUMENTS";
+
+export interface ChatSessionSummary {
+    id: string;
+    title: string | null;
+    scope_type: ChatScopeType;
+    document_ids: string[];
+    created_at: string;
+}
+
 export interface ChatMessage {
     id: string;
     session_id: string;
@@ -207,6 +217,42 @@ export const apiClient = {
             throw new Error(`Failed to fetch chat history: ${response.status}`);
         }
         return response.json();
+    },
+
+    async listChatSessions(): Promise<ChatSessionSummary[]> {
+        const response = await fetch(`${API_BASE_URL}/chat/sessions`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch chat sessions: ${response.status}`);
+        }
+        return response.json();
+    },
+
+    async createChatSession(
+        scopeType: ChatScopeType,
+        documentIds: string[],
+    ): Promise<ChatSessionSummary> {
+        const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope_type: scopeType, document_ids: documentIds }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to create chat session: ${response.status}`);
+        }
+        return response.json();
+    },
+
+    async deleteChatSession(sessionId: string): Promise<void> {
+        // NOTE: session-level delete lives under /rag/sessions/{id} (not /chat/sessions/{id}) -
+        // /chat/sessions/{id} is reserved for per-message truncation.
+        const response = await fetch(`${API_BASE_URL}/rag/sessions/${sessionId}`, {
+            method: "DELETE",
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to delete chat session: ${response.status}`);
+        }
     },
 
     async truncateChatHistory(sessionId: string, messageId: string): Promise<void> {
