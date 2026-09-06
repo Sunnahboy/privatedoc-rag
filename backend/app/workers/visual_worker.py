@@ -3,9 +3,10 @@ OCR Worker (Dedicated Visual Ingestion Pipeline)
 
 Purpose:
 - Handles resource-heavy image OCR tasks (scanned PDFs, JPEGs, PNGs).
-- Isolated from standard text workers to prevent GPU/CPU starvation.
-- Consumes from 'document.ocr.queue'.
+- Uses a centralized Model-as-a-Service (MaaS) API to offload VRAM pressure.
+- Consumes from 'document.visual.queue'.
 """
+
 import uuid
 import asyncio
 import logging
@@ -24,23 +25,20 @@ from app.messaging.connection import rabbitmq_manager
 from app.pipeline.detector.models import DocumentVisualJobMessage
 from app.models.document import Document
 
-from app.pipeline.embeddings.visual_engine import VisualRetrieverEngine
+# Lightweight HTTP client instead of heavy PyTorch model
+from app.pipeline.embeddings.visual_client import VisualAPIClient
 from app.utils.file_utils import ensure_upload_dir
 from app.utils.logging_utils import configure_logging
 
 configure_logging()
 logger = logging.getLogger("visual_worker")
 
-# no heavy loading on import
-visual_engine = None
-qdrant_client = None
-
-# THE FIX: A stable namespace for generating deterministic UUIDs
+# A stable namespace for generating deterministic UUIDs
 QDRANT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "privatedoc.rag")
 
 
 def render_pdf_page_to_image(file_path: Path, page_number: int) -> Image.Image:
-    """Renders a specific PDF page to a high-res PIL Image for the Vision Model."""
+    """Renders a specific PDF page to a high-res PIL Image for the Vision API."""
     try:
         doc = fitz.open(file_path)
         if page_number > len(doc):
@@ -60,135 +58,149 @@ def render_pdf_page_to_image(file_path: Path, page_number: int) -> Image.Image:
         raise ValueError(f"Corrupted or unrenderable PDF page: {page_number}") from exc
 
 
-async def process_visual_job(message: aio_pika.IncomingMessage) -> None:
-    """Consumes visual processing tasks and generates multi-vector embeddings."""
-    global visual_engine, qdrant_client
+class VisualWorker:
+    """
+    OOP Encapsulation of the Visual Worker. 
+    Eliminates fragile global variables and properly manages connection state.
+    """
+    
+    def __init__(self):
+        # State explicitly tied to the instance
+        self.qdrant_client: AsyncQdrantClient | None = None
+        self.visual_engine: VisualAPIClient | None = None
+        self.channel: aio_pika.RobustChannel | None = None
 
-    # THE FIX: Removed async with message.process() to manually handle ACK/NACKs safely
-    try:
-        payload = DocumentVisualJobMessage.model_validate_json(message.body)
-    except Exception as e:
-        logger.critical(f"Invalid visual message payload dropped: {e}")
-        await message.reject(requeue=False)
-        return
-
-    logger.info(
-        f"Processing Visual Page | Doc: {payload.document_id} | "
-        f"Page: {payload.page_number} | Trigger: {payload.classification}"
-    )
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Document).where(Document.id == payload.document_id)
-        )
-        doc = result.scalars().first()
-        if not doc or not doc.stored_filename:
-            logger.error(
-                f"Document {payload.document_id} not found in DB. Dropping job."
-            )
+    async def process_job(self, message: aio_pika.IncomingMessage) -> None:
+        """Consumes visual processing tasks and routes them to the centralized API."""
+        try:
+            payload = DocumentVisualJobMessage.model_validate_json(message.body)
+        except Exception as e:
+            logger.critical(f"Invalid visual message payload dropped: {e}")
             await message.reject(requeue=False)
             return
 
-        upload_dir = ensure_upload_dir().resolve()
-        file_path = (upload_dir / doc.stored_filename).resolve()
-
-    if not file_path.exists():
-        logger.error(f"File not found at resolved path: {file_path}. Dropping job.")
-        await message.reject(requeue=False)
-        return
-
-    try:
-        # Render the physical page to an image
-        image = await asyncio.to_thread(
-            render_pdf_page_to_image, file_path, payload.page_number
-        )
-
-        # Generate Late-Interaction Multi-Vectors
-        multi_vector = await asyncio.to_thread(visual_engine.embed_image, image)
-
-        point_string_id = f"{payload.document_id}_page_{payload.page_number}"
-        
-        # THE FIX: Deterministic UUID prevents Qdrant duplicate vectors if the job is rerun
-        deterministic_uuid = str(uuid.uuid5(QDRANT_NAMESPACE, point_string_id))
-
-        await qdrant_client.upsert(
-            collection_name="documents_visual",
-            points=[
-                models.PointStruct(
-                    id=deterministic_uuid,
-                    vector=multi_vector.tolist(),
-                    payload={
-                        "chunk_id": point_string_id,
-                        "document_id": payload.document_id,
-                        "page_number": payload.page_number,
-                        "classification": payload.classification,
-                        "reasons": payload.reasons,
-                    },
-                )
-            ],
-        )
-
         logger.info(
-            f"Successfully visually indexed page {payload.page_number} "
-            f"for doc {payload.document_id}"
+            f"Processing Visual Page | Doc: {payload.document_id} | "
+            f"Page: {payload.page_number} | Trigger: {payload.classification}"
         )
-        await message.ack()
 
-    except Exception:
-        logger.exception("Recoverable error processing visual job, requeuing: ")
-        await message.reject(requeue=True)
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Document).where(Document.id == payload.document_id)
+            )
+            doc = result.scalars().first()
+            if not doc or not doc.stored_filename:
+                logger.error(f"Document {payload.document_id} not found in DB. Dropping job.")
+                await message.reject(requeue=False)
+                return
 
+            upload_dir = ensure_upload_dir().resolve()
+            file_path = (upload_dir / doc.stored_filename).resolve()
 
-async def run_worker() -> None:
-    """Connects to RabbitMQ and starts the visual processing loop."""
-    global visual_engine, qdrant_client
+        if not file_path.exists():
+            logger.error(f"File not found at resolved path: {file_path}. Dropping job.")
+            await message.reject(requeue=False)
+            return
 
-    logger.info("Starting Visual Representation Worker...")
+        try:
+            # CPU-bound rendering safely offloaded
+            image = await asyncio.to_thread(
+                render_pdf_page_to_image, file_path, payload.page_number
+            )
 
-    # Initialize Qdrant client first
-    qdrant_client = AsyncQdrantClient(url=settings.qdrant_url)
+            # Generate Late-Interaction Multi-Vectors via HTTP Bridge
+            multi_vector = await self.visual_engine.embed_image(image)
 
-    # Initialize heavy model safely inside the async loop thread
-    logger.info("Loading ColQwen2 Vision Model into GPU...")
-    visual_engine = await asyncio.to_thread(VisualRetrieverEngine)
-    logger.info("Vision Model loaded successfully into GPU!")
+            point_string_id = f"{payload.document_id}_page_{payload.page_number}"
+            
+            # Deterministic UUID prevents Qdrant duplicate vectors if the job is rerun
+            deterministic_uuid = str(uuid.uuid5(QDRANT_NAMESPACE, point_string_id))
 
-    await rabbitmq_manager.initialize()
-    channel = await rabbitmq_manager.create_consumer_channel()
-    #ColPali takes VRAM/RAM. Process 1 visually-rich page at a time.
-    await channel.set_qos(prefetch_count=1)
+            await self.qdrant_client.upsert(
+                collection_name="documents_visual",
+                points=[
+                    models.PointStruct(
+                        id=deterministic_uuid,
+                        vector=multi_vector.tolist(),
+                        payload={
+                            "chunk_id": point_string_id,
+                            "document_id": payload.document_id,
+                            "page_number": payload.page_number,
+                            "classification": payload.classification,
+                            "reasons": payload.reasons,
+                        },
+                    )
+                ],
+            )
 
-    # Note: Visual worker declares its queue directly here, no external helper needed
-    queue = await channel.declare_queue("document.visual.queue", durable=True)
+            logger.info(
+                f"Successfully visually indexed page {payload.page_number} "
+                f"for doc {payload.document_id}"
+            )
+            await message.ack()
 
-    # THE FIX: Graceful Shutdown event handles SIGTERM cleanly
-    shutdown_event = asyncio.Event()
+        except Exception:
+            logger.exception("Recoverable error processing visual job, requeuing: ")
+            await message.reject(requeue=True)
 
-    def handle_shutdown(sig, frame):
-        logger.warning(f"Received termination signal ({sig}). Initiating graceful shutdown...")
-        shutdown_event.set()
+    async def run(self) -> None:
+        """Initializes dependencies and enters the RabbitMQ consumer loop."""
+        logger.info("Starting Visual Representation Worker...")
 
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda s=sig: handle_shutdown(s, None))
+        # Initialize clients natively within the class instance
+        self.qdrant_client = AsyncQdrantClient(url=settings.qdrant_url)
+        
+        logger.info("Initializing connection to Centralized Visual API...")
+        self.visual_engine = VisualAPIClient()
 
-    logger.info(f"[*] Visual Worker actively listening on '{queue.name}'")
-    consumer_tag = await queue.consume(process_visual_job)
+        await rabbitmq_manager.initialize()
+        self.channel = await rabbitmq_manager.create_consumer_channel()
+        
+        # Process 1 page at a time to prevent flooding the microservice lock
+        await self.channel.set_qos(prefetch_count=1)
 
-    try:
-        await shutdown_event.wait() 
-    finally:
-        logger.info("Graceful shutdown initiated. Stopping new message consumption...")
-        await queue.cancel(consumer_tag)
-        await channel.close()
-        await rabbitmq_manager.close()
-        if qdrant_client:
-            await qdrant_client.close()
-        logger.info("Visual Worker shutdown complete.")
+        queue = await self.channel.declare_queue("document.visual.queue", durable=True)
 
+        # OS Signal handling for graceful shutdown
+        shutdown_event = asyncio.Event()
+
+        def handle_shutdown(sig, frame):
+            logger.warning(f"Received termination signal ({sig}). Initiating graceful shutdown...")
+            shutdown_event.set()
+
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, lambda s=sig: handle_shutdown(s, None))
+
+        logger.info(f"[*] Visual Worker actively listening on '{queue.name}'")
+        
+        # RabbitMQ strictly passes `message`, so we pass the bound method
+        consumer_tag = await queue.consume(self.process_job)
+
+        try:
+            await shutdown_event.wait()
+        finally:
+            logger.info("Graceful shutdown initiated. Stopping new message consumption...")
+            await queue.cancel(consumer_tag)
+            
+            # Clean closure of all network socket pools
+            if self.channel:
+                await self.channel.close()
+                
+            await rabbitmq_manager.close()
+
+            if self.qdrant_client:
+                await self.qdrant_client.close()
+                
+            if self.visual_engine:
+                await self.visual_engine.close()
+
+            logger.info("Visual Worker shutdown complete.")
 
 if __name__ == "__main__":
     try:
-        asyncio.run(run_worker())
+        # Instantiate the isolated class and run
+        worker = VisualWorker()
+        asyncio.run(worker.run())
     except KeyboardInterrupt:
-        logger.info("Visual worker stopped manually.")
+        logger.info("Visual worker stopped manually via KeyboardInterrupt.")
