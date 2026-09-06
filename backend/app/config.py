@@ -52,7 +52,10 @@ class Settings(BaseSettings):
 
     DLQ_NAME: str = "document.ingest.dlq"
     DLQ_ROUTING_KEY: str = "document.ingest.dead"
-
+    # Centralized Visual API Configuration
+    visual_api_host: str = "0.0.0.0"
+    visual_api_port: int = 8000
+    visual_api_url: str = "http://localhost:8000"
     # Retrieval & Reranker settings
     rrf_k: int = 60
     top_k_reranker: int = 5
