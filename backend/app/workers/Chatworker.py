@@ -1,4 +1,4 @@
-import copy#noqa
+import copy  # noqa
 import json
 import logging
 
@@ -10,6 +10,7 @@ from app.config import settings
 from app.models.chat import ChatMessage
 from app.orchestration.rag_pipeline import RAGPipeline
 from app.pipeline.retrieval.query_rewriter import QueryRewriter
+from app.pipeline.retrieval.query_router import HybridQueryRouter, RouteDecision
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,15 @@ valkey_client = redis.from_url(settings.valkey_url, decode_responses=True)
 
 
 class ChatWorker:
-    def __init__(self, rag_pipeline: RAGPipeline, query_rewriter: QueryRewriter):
+    def __init__(
+        self,
+        rag_pipeline: RAGPipeline,
+        query_rewriter: QueryRewriter,
+        query_router: HybridQueryRouter,
+    ):
         self.rag_pipeline = rag_pipeline
         self.query_rewriter = query_rewriter
+        self.query_router = query_router
 
     async def _get_chat_history(
         self, session_id: str, current_message_id: str, db: AsyncSession, limit: int = 6
@@ -69,14 +76,38 @@ class ChatWorker:
             chat_history = await self._get_chat_history(
                 session_id=session_id, current_message_id=message_id, db=db, limit=6
             )
-            search_query = await self.query_rewriter.rewrite(
-                query=question, chat_history=chat_history
-            )
+
+            # --- THE DOUBLE SHIELD PIPELINE ---
+
+            # 1. TIER 1: Instant Regex Bypass on RAW query (0ms)
+            route_decision = self.query_router.route_regex_only(question)
+
+            # 2. TIER 3: Semantic Fallback on RAW query (10ms)
+            if route_decision != RouteDecision.CASUAL:
+                # If regex missed a typo (e.g., "hi are u"), catch it with vectors BEFORE rewriting
+                route_decision = await self.query_router.route_semantic(question)
+
+            # 3. EXECUTION FORKING
+            if route_decision == RouteDecision.CASUAL:
+                search_query = question
+                skip_search = True
+                logger.info(
+                    "Router identified casual intent. Bypassing Rewriter and Qdrant."
+                )
+            else:
+                # 4. CONTEXT RESOLUTION (800ms)
+                # We only pay the LLM latency cost if we are GUARANTEED to hit Qdrant
+                logger.info("Query requires search. Rewriting context...")
+                search_query = await self.query_rewriter.rewrite(
+                    query=question, chat_history=chat_history
+                )
+                skip_search = False
 
             stream = self.rag_pipeline.ask_stream(
                 question=search_query,
                 document_ids=document_ids,
                 chat_history=chat_history,
+                skip_search=skip_search,
             )
 
             # LIVE GENERATION: Write to Valkey RAM buffer
