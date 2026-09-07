@@ -48,6 +48,7 @@ class RAGPipeline(BaseRAGPipeline):
         question: str,
         document_id: str | None = None,
         chat_history: list[ChatMessage] | None = None,
+        skip_search: bool = False,
     ) -> GenerateResult:
         reset_profiler()
         rendered_images = []
@@ -138,6 +139,7 @@ class RAGPipeline(BaseRAGPipeline):
         question: str,
         document_ids: list[str],
         chat_history: list[ChatMessage] | None = None,
+        skip_search: bool = False,
     ) -> AsyncGenerator[dict, None]:
 
         reset_profiler()
@@ -146,95 +148,88 @@ class RAGPipeline(BaseRAGPipeline):
         sparse_count = 0
         visual_count = 0
 
-        # Yield a status update so the UI knows we are working
-        yield {"type": "status", "message": "Searching document vectors..."}
+        # Initialize an empty default in case we skip search
+        retrieved = RetrievalResult(chunks=[], found=False, dense_hits=0, sparse_hits=0, fused_hits=0)
 
-        with profile("Retrieval"):
-            # Prevent context dilution and protect the CPU reranker
-            base_k = 15
-            dynamic_top_k = min(base_k + max(0, len(document_ids) - 1) * 5, 40)
-            if self.multimodal_pipeline and document_ids:
-                multimodal_result = await self.multimodal_pipeline.search(
-                    query=question,
-                    document_ids=document_ids,
-                    text_top_k=dynamic_top_k,
-                    final_top_k=8,
-                )
-                dense_count = multimodal_result.dense_hits
-                sparse_count = multimodal_result.sparse_hits
-                visual_count = len(multimodal_result.visual_pages)
+        if not skip_search:
+            yield {"type": "status", "message": "Searching document vectors..."}
 
-                logger.info(
-                    "Visual search result | has_strong_visual_match: %s | visual_pages: %s",
-                    multimodal_result.has_strong_visual_match,
-                    [vp["page_number"] for vp in multimodal_result.visual_pages],
-                )
+            with profile("Retrieval"):
+                base_k = 15
+                dynamic_top_k = min(base_k + max(0, len(document_ids) - 1) * 5, 40)
+                
+                if self.multimodal_pipeline and document_ids:
+                    multimodal_result = await self.multimodal_pipeline.search(
+                        query=question,
+                        document_ids=document_ids,
+                        text_top_k=dynamic_top_k,
+                        final_top_k=8,
+                    )
+                    dense_count = multimodal_result.dense_hits
+                    sparse_count = multimodal_result.sparse_hits
+                    visual_count = len(multimodal_result.visual_pages)
+                    logger.info(
+                        "Visual search result | has_strong_visual_match: %s | visual_pages: %s",
+                        multimodal_result.has_strong_visual_match,
+                        [vp["page_number"] for vp in multimodal_result.visual_pages],
+                    )
 
-                retrieved = RetrievalResult(
-                    chunks=multimodal_result.fused_chunks,
-                    found=bool(multimodal_result.fused_chunks),
-                    dense_hits=dense_count,
-                    sparse_hits=sparse_count,
-                    fused_hits=len(multimodal_result.fused_chunks),
-                )
+                    retrieved = RetrievalResult(
+                        chunks=multimodal_result.fused_chunks,
+                        found=bool(multimodal_result.fused_chunks),
+                        dense_hits=dense_count,
+                        sparse_hits=sparse_count,
+                        fused_hits=len(multimodal_result.fused_chunks),
+                    )
 
-                if multimodal_result.has_strong_visual_match:
-                    yield {
-                        "type": "status",
-                        "message": f"Extracting {visual_count} relevant visual pages...",
-                    }
+                    if multimodal_result.has_strong_visual_match:
+                        yield {
+                            "type": "status",
+                            "message": f"Extracting {visual_count} relevant visual pages...",
+                        }
 
-                    pdf_path = Path(settings.upload_dir) / f"{document_ids}.pdf"
-                    if pdf_path.exists():
-                        with fitz.open(pdf_path) as doc:
-                            for vp in multimodal_result.visual_pages:
-                                # Safely extract the origin document for THIS specific image
-                                origin_doc_id = vp.get("document_id") or document_ids[0]
-                                pdf_path = (
-                                    Path(settings.upload_dir) / f"{origin_doc_id}.pdf"
-                                )
+                        for vp in multimodal_result.visual_pages:
+                            origin_doc_id = vp.get("document_id") or document_ids[0]
+                            pdf_path = Path(settings.upload_dir) / f"{origin_doc_id}.pdf"
 
-                                if pdf_path.exists():
-                                    try:
-                                        with fitz.open(pdf_path) as doc:
-                                            page_num = vp["page_number"]
-                                            if 0 < page_num <= len(doc):
-                                                page = doc[page_num - 1]
-                                                pix = page.get_pixmap(
-                                                    matrix=fitz.Matrix(1.2, 1.2)
-                                                )
-                                                img = Image.frombytes(
-                                                    "RGBA" if pix.alpha else "RGB",
-                                                    [pix.width, pix.height],
-                                                    pix.samples,
-                                                )
-                                                rendered_images.append(img)
-                                    except Exception as e:#noqa
-                                        logger.error(
-                                            f"Failed to render page {page_num} for doc {origin_doc_id}: {e}"
-                                        )
-            else:
-                retrieved = await self.retriever.retrieve(
-                    query=question,
-                    document_id=document_ids[0] if document_ids else None,
-                )
-                dense_count = retrieved.dense_hits
-                sparse_count = retrieved.sparse_hits
+                            if pdf_path.exists():
+                                try:
+                                    with fitz.open(pdf_path) as doc:
+                                        page_num = vp["page_number"]
+                                        if 0 < page_num <= len(doc):
+                                            page = doc[page_num - 1]
+                                            pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+                                            img = Image.frombytes(
+                                                "RGBA" if pix.alpha else "RGB",
+                                                [pix.width, pix.height],
+                                                pix.samples,
+                                            )
+                                            rendered_images.append(img)
+                                except Exception as e:#noqa
+                                    logger.error(f"Failed to render page {page_num} for doc {origin_doc_id}: {e}")
+                else:
+                    retrieved = await self.retriever.retrieve(
+                        query=question,
+                        document_id=document_ids[0] if document_ids else None,
+                    )
+                    dense_count = retrieved.dense_hits
+                    sparse_count = retrieved.sparse_hits
 
-        # Handle empty results gracefully through the stream
-        if not retrieved.found:
-            yield {
-                "type": "token",
-                "content": "I couldn't find any relevant information in the selected document.",
-            }
-            yield {
-                "type": "done",
-                "citations": [],
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "prompt_chars": 0,
-            }
-            return
+            # THE FIX: Handle empty results gracefully ONLY if we intended to search
+            if not retrieved.found:
+                yield {
+                    "type": "token",
+                    "content": "I couldn't find any relevant information in the selected document.",
+                }
+                yield {
+                    "type": "done",
+                    "citations": [],
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "prompt_chars": 0,
+                }
+                return
+
 
         yield {"type": "status", "message": "Drafting response..."}
 
