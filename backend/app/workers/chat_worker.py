@@ -11,6 +11,7 @@ from app.messaging.connection import rabbitmq_manager
 from app.messaging.messages import ChatGenerationMessage
 from app.messaging.queues import setup_queues_and_bindings
 from app.orchestration.rag_pipeline import RAGPipeline
+from app.pipeline.embeddings.fastembed_embedder import FastEmbedEmbedder
 from app.pipeline.embeddings.visual_client import VisualAPIClient
 from app.pipeline.retrieval.bm25_retriever import BM25Retriever
 from app.pipeline.retrieval.hybrid_retriever import HybridRetriever
@@ -18,6 +19,7 @@ from app.pipeline.retrieval.multimodal_pipeline import MultimodalRetrievalPipeli
 from app.pipeline.retrieval.multimodal_retriever import MultimodalRetriever
 from app.pipeline.retrieval.qdrant_retriever import QdrantRetriever
 from app.pipeline.retrieval.query_rewriter import QueryRewriter
+from app.pipeline.retrieval.query_router import HybridQueryRouter
 from app.utils.logging_utils import configure_logging
 
 from .Chatworker import ChatWorker as CoreChatWorker  # Aliased to avoid naming conflict
@@ -37,13 +39,14 @@ class ChatGenerationService:
         self.visual_engine: VisualAPIClient | None = None
         self.rag_pipeline: RAGPipeline | None = None
         self.query_rewriter: QueryRewriter | None = None
+        self.query_router: HybridQueryRouter | None = None
         self.channel = None
 
     async def process_job(self, message: IncomingMessage) -> None:
         """RabbitMQ Callback."""
         try:
             payload = ChatGenerationMessage.model_validate_json(message.body)
-        except Exception as e:#noqa
+        except Exception as e:  # noqa
             logger.critical("Invalid chat message payload dropped: %s", e)
             await message.reject(requeue=False)
             return
@@ -53,7 +56,9 @@ class ChatGenerationService:
         async with AsyncSessionLocal() as db:
             # Instantiate the business logic handler using self-owned dependencies
             worker = CoreChatWorker(
-                rag_pipeline=self.rag_pipeline, query_rewriter=self.query_rewriter
+                rag_pipeline=self.rag_pipeline,
+                query_rewriter=self.query_rewriter,
+                query_router=self.query_router,
             )
 
             try:
@@ -68,7 +73,7 @@ class ChatGenerationService:
                 await message.ack()
                 logger.info(f"Successfully finished chat job for {payload.message_id}")
 
-            except Exception as exc:#noqa
+            except Exception as exc:  # noqa
                 logger.error(
                     "Chat generation failed for %s: %s", payload.message_id, exc
                 )
@@ -128,6 +133,11 @@ class ChatGenerationService:
             retriever=base_retriever, multimodal_pipeline=multimodal_pipeline
         )
         self.query_rewriter = QueryRewriter()
+        # Instantiate the Embedder and Router, then pre-compute anchors
+        logger.info("Initializing Hybrid Query Router...")
+        text_embedder = FastEmbedEmbedder()
+        self.query_router = HybridQueryRouter(embedder=text_embedder)
+        await self.query_router.initialize()
 
         logger.info("AI Pipeline loaded successfully.")
 
