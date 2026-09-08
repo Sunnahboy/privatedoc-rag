@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useRAGQuery } from "@/hooks/useRAGQuery";
-import type { ChatScopeType } from "@/lib/api-client";
+import { normalizeDocumentStatus, type ChatScopeType } from "@/lib/api-client";
 
 interface RagChatProps {
   documentId?: string;
@@ -148,6 +148,20 @@ export function RagChat({
     workspaceSelectedIds,
   ]);
 
+  const unavailableSelectedDocuments = useMemo(
+    () => documents.filter((document) =>
+      activeDocumentIds.includes(document.document_id)
+      && normalizeDocumentStatus(document.status) !== "indexed",
+    ),
+    [activeDocumentIds, documents],
+  );
+  const hasUnavailableSelectedDocuments = unavailableSelectedDocuments.length > 0;
+  const unavailableDocumentsMessage = unavailableSelectedDocuments.some(
+    (document) => normalizeDocumentStatus(document.status) === "failed",
+  )
+    ? "A selected document failed to index. Remove it before sending."
+    : "A selected document is still being processed. It will be available once indexing finishes.";
+
 
   // Auto-resize composer
   useEffect(() => {
@@ -229,6 +243,14 @@ export function RagChat({
 
     const trimmed = prompt.trim();
     if (!trimmed) return;
+    if (activeDocumentIds.length === 0) {
+      setError("Select at least one document before sending a question.");
+      return;
+    }
+    if (hasUnavailableSelectedDocuments) {
+      setError(unavailableDocumentsMessage);
+      return;
+    }
     
     submitInFlightRef.current = true;
     if (shouldClearComposer) setQuery("");
@@ -237,10 +259,6 @@ export function RagChat({
     abortControllerRef.current = controller;
 
     try {
-      if (activeDocumentIds.length === 0) {
-        setError("Select at least one document before sending a question.");
-        return;
-      }
       await askQuestion(
         undefined,
         activeDocumentIds,
@@ -376,11 +394,19 @@ export function RagChat({
                       disabled={docsLoading}
                     >
                       <option value="">Choose a document</option>
-                      {documents.map((doc) => (
-                        <option key={doc.document_id} value={doc.document_id}>
-                          {doc.original_filename}
-                        </option>
-                      ))}
+                      {documents.map((doc) => {
+                        const documentStatus = normalizeDocumentStatus(doc.status);
+                        const statusLabel = documentStatus === "processing"
+                          ? " (still processing)"
+                          : documentStatus === "failed"
+                            ? " (indexing failed)"
+                            : "";
+                        return (
+                          <option key={doc.document_id} value={doc.document_id}>
+                            {doc.original_filename}{statusLabel}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                   {searchScope === "selected" && (
@@ -389,6 +415,9 @@ export function RagChat({
                         const isChecked = useWorkspaceScope
                           ? workspaceSelectedIds.includes(doc.document_id)
                           : checkedDocumentIds.includes(doc.document_id);
+                        const documentStatus = normalizeDocumentStatus(doc.status);
+                        const isProcessing = documentStatus === "processing";
+                        const hasFailed = documentStatus === "failed";
                         return (
                           <label key={doc.document_id} className="flex min-w-0 items-center gap-2 text-xs text-on-surface-variant">
                             <input
@@ -411,7 +440,17 @@ export function RagChat({
                               }}
                               className="accent-primary"
                             />
-                            <span className="truncate">{doc.original_filename}</span>
+                            <span className="min-w-0 truncate">{doc.original_filename}</span>
+                            {isProcessing && (
+                              <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                                Still processing
+                              </span>
+                            )}
+                            {hasFailed && (
+                              <span className="shrink-0 rounded-full bg-error/10 px-1.5 py-0.5 text-[10px] font-medium text-error">
+                                Indexing failed
+                              </span>
+                            )}
                           </label>
                         );
                       })}
@@ -427,6 +466,9 @@ export function RagChat({
                   )}
                   {searchScope === "current" && !(useWorkspaceScope ? workspaceSelectedIds[0] : selectedDocumentId) && (
                     <p className="text-xs text-error">Choose a document for this scope.</p>
+                  )}
+                  {hasUnavailableSelectedDocuments && (
+                    <p className="text-xs text-primary">{unavailableDocumentsMessage}</p>
                   )}
               </div>
             )}
@@ -455,21 +497,33 @@ export function RagChat({
           {/* THE FIX: Map directly over chatHistory */}
           {chatHistory.map((message) => {
             const isAiMessage = message.role === "assistant";
+            const isPendingAssistant = isAiMessage
+              && !message.content
+              && ["queued", "processing"].includes(message.status || "");
             const canCollapse = isAiMessage && (message.content?.length || 0) > COLLAPSE_THRESHOLD;
             const isExpandedMessage = expandedMessageIds.has(message.id);
+            const messageContainerClass = editingMessageId === message.id
+              ? "relative w-full max-w-[95%]"
+              : message.role === "user"
+                ? chatFocus
+                  ? "relative w-fit max-w-[88%] rounded-3xl bg-surface-container px-5 py-3 text-on-surface"
+                  : "relative w-fit max-w-[88%] rounded-2xl rounded-br-md border border-outline-variant/20 bg-chat-input px-4 py-3 text-on-surface shadow-sm"
+                // Assistant answers are rendered directly on the chat surface
+                // in both layouts. The boxed treatment is reserved for the
+                // user's own messages.
+                : "relative w-fit max-w-[92%] text-on-surface";
             
-            // THE FIX: Hide the empty bubble if it's currently processing!
-            // It will only show the text once it actually has text.
-            if (isAiMessage && !message.content && ["queued", "processing"].includes(message.status || "")) {
-                return null; 
-            }
-
             return (
               <div key={message.id} className={message.role === "user" ? "group flex justify-end" : "group flex justify-start"}>
-                <div className={editingMessageId === message.id ? "relative w-full max-w-[95%]" : chatFocus ? message.role === "user" ? "relative w-fit max-w-[88%] rounded-3xl bg-surface-container px-5 py-3 text-on-surface" : "relative w-fit max-w-[92%] text-on-surface" : message.role === "user" ? "relative w-fit max-w-[88%] rounded-2xl rounded-br-md border border-outline-variant/20 bg-chat-input px-4 py-3 text-on-surface shadow-sm" : "relative w-fit max-w-[92%] rounded-2xl rounded-bl-md border border-outline-variant/20 bg-chat-input px-4 py-3 text-on-surface shadow-sm"}>
+                <div className={messageContainerClass}>
                   <div className="flex flex-col gap-1">
                     <div className="min-w-0 break-words">
-                      {isAiMessage ? (
+                      {isPendingAssistant ? (
+                        <div role="status" className="flex items-center gap-2 py-1 text-sm text-primary">
+                          <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
+                          {statusMessage || "Searching your documents..."}
+                        </div>
+                      ) : isAiMessage ? (
                         <div className={`relative ${canCollapse && !isExpandedMessage ? "max-h-72 overflow-hidden" : ""}`}>
                           <div className="prose prose-sm max-w-none text-on-surface prose-p:leading-6 prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-on-surface prose-p:text-on-surface prose-strong:text-on-surface prose-b:text-on-surface prose-em:text-on-surface prose-ul:text-on-surface prose-ol:text-on-surface prose-li:text-on-surface prose-li:marker:text-on-surface-variant prose-a:text-primary prose-code:text-primary prose-code:bg-surface-container-low prose-pre:bg-surface-container-low prose-pre:text-on-surface prose-blockquote:border-primary prose-blockquote:text-on-surface-variant prose-table:border-outline-variant prose-th:border-outline-variant prose-th:text-on-surface prose-td:border-outline-variant prose-td:text-on-surface-variant prose-hr:border-outline-variant">
                             <ReactMarkdown>{message.content}</ReactMarkdown>
@@ -533,7 +587,7 @@ export function RagChat({
                       </details>
                     )}
 
-                    {editingMessageId !== message.id && (
+                    {editingMessageId !== message.id && !isPendingAssistant && (
                       <div className="mt-1 flex items-end justify-between gap-4 opacity-0 transition-opacity group-hover:opacity-100">
                         <span className="text-[10px] text-on-surface-variant/60">{formatMessageTime(message.created_at)}</span>
                         <div className="flex items-center gap-3">
@@ -550,8 +604,12 @@ export function RagChat({
             );
           })}
 
-          {/* THE FIX: Use the actual backend status message so you know exactly what is happening */}
-          {isLoading && (
+          {/* Before the assistant placeholder exists, retain a visible status. */}
+          {isLoading && !chatHistory.some((message) =>
+            message.role === "assistant"
+            && !message.content
+            && ["queued", "processing"].includes(message.status || ""),
+          ) && (
             <div className="flex items-center gap-2 px-1 text-sm text-primary">
               <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
               {statusMessage || "Searching vectors and drafting answer..."}
@@ -579,7 +637,7 @@ export function RagChat({
                   if (e.nativeEvent.isComposing) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    if (!isLoading && query.trim()) void submitQuery();
+                    if (!isLoading && !hasUnavailableSelectedDocuments && query.trim()) void submitQuery();
                   }
                 }}
                 placeholder={editingMessageId ? "Edit your message and press Enter to update" : "Ask about this book..."}
@@ -593,9 +651,10 @@ export function RagChat({
                 if (isLoading) abortControllerRef.current?.abort();
                 else void submitQuery();
               }}
-              disabled={!isLoading && !query.trim()}
+              disabled={!isLoading && (!query.trim() || hasUnavailableSelectedDocuments)}
+              title={hasUnavailableSelectedDocuments ? unavailableDocumentsMessage : undefined}
               className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-on-primary shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-                isLoading ? "border-error bg-error hover:bg-error/90" : query.trim() ? "border-primary bg-primary hover:bg-primary/90" : "cursor-not-allowed border-outline bg-outline text-on-surface-variant"
+                isLoading ? "border-error bg-error hover:bg-error/90" : query.trim() && !hasUnavailableSelectedDocuments ? "border-primary bg-primary hover:bg-primary/90" : "cursor-not-allowed border-outline bg-outline text-on-surface-variant"
               }`}
             >
               <span className="material-symbols-outlined text-[20px]">{isLoading ? "stop" : "arrow_upward"}</span>

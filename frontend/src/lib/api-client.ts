@@ -74,6 +74,8 @@ export interface ChatJobResponse {
     assistant_message_id: string;
 }
 
+const CHAT_SUBMISSION_TIMEOUT_MS = 30_000;
+
 // Stream chunk event types matching our SSE backend
 export type StreamChunk =
     | { type: "session"; session_id: string }
@@ -114,27 +116,55 @@ export const apiClient = {
     async submitChatJob(
         query: string,
         documentIds: string[],
-        sessionId?: string | null
+        sessionId?: string | null,
+        signal?: AbortSignal,
     ): Promise<ChatJobResponse> {
+        if (signal?.aborted) {
+            throw new DOMException("Aborted", "AbortError");
+        }
+
         const payload = {
             question: query,
             document_ids: documentIds,
             session_id: sessionId || null,
         };
 
-        const response = await fetch(`${API_BASE_URL}/rag/ask`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-        });
+        // A queued request must never leave the composer blocked forever.
+        // Use a local controller so the user can cancel it, while also
+        // surfacing a clear error if the API does not respond in time.
+        const controller = new AbortController();
+        let timedOut = false;
+        const timeoutId = window.setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+        }, CHAT_SUBMISSION_TIMEOUT_MS);
+        const abortFromCaller = () => controller.abort();
+        signal?.addEventListener("abort", abortFromCaller, { once: true });
 
-        if (!response.ok) {
-            throw new Error(`Failed to submit chat job: ${response.status}`);
+        try {
+            const response = await fetch(`${API_BASE_URL}/rag/ask`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+                signal: controller.signal,
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to submit chat job: ${response.status}`);
+            }
+
+            return response.json();
+        } catch (error) {
+            if (timedOut) {
+                throw new Error("Chat submission timed out. Please try again.");
+            }
+            throw error;
+        } finally {
+            window.clearTimeout(timeoutId);
+            signal?.removeEventListener("abort", abortFromCaller);
         }
-
-        return response.json();
     },
 
     // src/lib/api-client.ts

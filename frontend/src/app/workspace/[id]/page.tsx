@@ -627,7 +627,11 @@ function WorkspacePageContent({ id }: { id: string }) {
               isExpanded={isRagExpanded}
               onToggleExpanded={() => setIsRagExpanded((current) => !current)}
               chatFocus={isChatFocus}
-              useWorkspaceScope={isChatFocus}
+              // The split reader and Full Chat are two layouts for the same
+              // conversation. Keeping this scope-controlled in both modes
+              // prevents a mode change from switching to the legacy
+              // URL/localStorage session state.
+              useWorkspaceScope
               isChatSidebarOpen={isChatSidebarOpen}
               onOpenChatSidebar={() => setIsChatSidebarOpen(true)}
               className="h-full rounded-none border-0"

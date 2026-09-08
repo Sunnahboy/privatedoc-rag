@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation"; 
 import { apiClient, RagResponse, ChatMessage, StreamChunk, Citation } from "@/lib/api-client";
 
@@ -66,6 +66,13 @@ export function useRAGQuery(options: UseRAGQueryOptions = {}) {
   const sessionId = isControlled ? controlledSessionId ?? null : internalSessionId;
   const sessionIdRef = useRef<string | null>(null);
 
+  // Keep the ref in sync before the browser paints when an externally
+  // controlled session changes. Explicit handoffs also update it immediately
+  // below, before their asynchronous state update is rendered.
+  useLayoutEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
   // Bumps whenever the ACTIVE session's slot is mutated, forcing a
   // re-render so the mirrored fields below reflect the latest values.
   const [, forceRender] = useState(0);
@@ -127,16 +134,16 @@ export function useRAGQuery(options: UseRAGQueryOptions = {}) {
   };
 
   const setSessionId = (next: string | null) => {
+    // State updates are asynchronous. Update the ref now so all callbacks
+    // that run after `/rag/ask` returns (status, history, and SSE events)
+    // target the same slot that the next render will display.
+    sessionIdRef.current = next;
     if (isControlled) {
       onSessionChange?.(next);
     } else {
       setInternalSessionId(next);
     }
   };
-
-  useEffect(() => {
-    sessionIdRef.current = sessionId;
-  }, [sessionId]);
 
   // Legacy URL/localStorage-driven session resolution. Skipped entirely
   // when the session is externally controlled (Chat Focus workspace).
@@ -270,7 +277,8 @@ export function useRAGQuery(options: UseRAGQueryOptions = {}) {
       const { session_id, user_message_id, assistant_message_id } = await apiClient.submitChatJob(
         q,
         documentIds,
-        currentSessionId
+        currentSessionId,
+        signal,
       );
 
       // The slot was keyed by `currentSessionId` (possibly the "no session
@@ -288,6 +296,7 @@ export function useRAGQuery(options: UseRAGQueryOptions = {}) {
           const newParams = new URLSearchParams(searchParams.toString());
           newParams.set("session_id", session_id);
           router.replace(`${pathname}?${newParams.toString()}`);
+          
         }
       }
 
@@ -388,6 +397,7 @@ export function useRAGQuery(options: UseRAGQueryOptions = {}) {
       const newParams = new URLSearchParams(searchParams.toString());
       newParams.delete("session_id");
       router.replace(`${pathname}?${newParams.toString()}`);
+      
     }
   };
 
