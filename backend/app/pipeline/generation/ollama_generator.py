@@ -61,6 +61,21 @@ Question:
 {question}
 
 Answer:"""
+CASUAL_TEMPLATE = """You are a helpful, friendly AI assistant.
+Your goal is to respond to casual greetings or small talk naturally and concisely.
+
+Instructions:
+1. Keep it brief.
+2. Do not mention documents, context, or searching.
+3. NEVER volunteer technical information or summarize previous topics unless the user explicitly asks a question about them.
+
+Prior Conversation:
+{chat_history}
+
+User:
+{question}
+
+Answer:"""
 
 
 class OllamaGenerator(BaseGenerator):
@@ -100,10 +115,15 @@ class OllamaGenerator(BaseGenerator):
         chat_history: list[ChatMessage] | None = None,
     ) -> AsyncGenerator[dict, None]:
 
-        active_template = MULTIMODAL_TEMPLATE if images else TEXT_TEMPLATE
-
-        # THE FIX: Dynamically route to the VLM if images are present
-        active_model = self.visual_model if images else self.text_model
+        if not context:
+            active_template = CASUAL_TEMPLATE
+            active_model = self.text_model
+        elif images:
+            active_template = MULTIMODAL_TEMPLATE
+            active_model = self.visual_model
+        else:
+            active_template = TEXT_TEMPLATE
+            active_model = self.text_model
 
         prompt_builder = PromptBuilder(active_template)
         prompt = prompt_builder.build(

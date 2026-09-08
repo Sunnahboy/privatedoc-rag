@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { apiClient, DocumentListItem } from "@/lib/api-client";
+import { apiClient, DocumentListItem, normalizeDocumentStatus } from "@/lib/api-client";
 //manage fetching the document list.
 interface UseDocumentsOptions {
   autoFetch?: boolean;
@@ -48,6 +48,20 @@ export function useDocuments(options: UseDocumentsOptions = {}) {
       })();
     }
   }, [autoFetch, fetchDocuments]);
+
+  // Keep document-selection controls current while newly uploaded documents
+  // are being indexed. The interval stops as soon as nothing is processing.
+  useEffect(() => {
+    if (!documents.some((document) => normalizeDocumentStatus(document.status) === "processing")) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void fetchDocuments();
+    }, 5_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [documents, fetchDocuments]);
 
   return { documents, isLoading, error, fetchDocuments, deleteDocument };
 }

@@ -13,6 +13,7 @@ import {
 import { apiClient, ChatScopeType, ChatSessionSummary } from "@/lib/api-client";
 
 const LAST_SESSION_STORAGE_KEY = "privatedoc.active-chat-session-id";
+const LEGACY_LAST_SESSION_STORAGE_KEY = "rag_last_session_id";
 
 interface WorkspaceContextValue {
   /** Controls the PDF reader. Independent from the active chat session. */
@@ -79,8 +80,17 @@ export function WorkspaceProvider({
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(LAST_SESSION_STORAGE_KEY);
-      if (saved) {
-        setActiveChatSessionIdState(saved);
+      // Split Screen used this key before both reader modes shared
+      // WorkspaceContext. Adopt it once so an in-progress legacy chat is not
+      // stranded when the user reloads into the unified session model.
+      const legacySaved = window.localStorage.getItem(LEGACY_LAST_SESSION_STORAGE_KEY);
+      const sessionId = saved || legacySaved;
+
+      if (sessionId) {
+        setActiveChatSessionIdState(sessionId);
+        if (!saved && legacySaved) {
+          window.localStorage.setItem(LAST_SESSION_STORAGE_KEY, legacySaved);
+        }
       }
     } catch {
       // Storage can be unavailable in private browsing contexts.
