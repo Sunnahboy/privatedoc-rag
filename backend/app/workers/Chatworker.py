@@ -76,6 +76,14 @@ class ChatWorker:
             chat_history = await self._get_chat_history(
                 session_id=session_id, current_message_id=message_id, db=db, limit=6
             )
+            document_titles = []
+            if document_ids:
+                doc_query = text(
+                    "SELECT original_filename FROM documents WHERE id = ANY(:doc_ids)"
+                )
+                doc_result = await db.execute(doc_query, {"doc_ids": document_ids})
+                # Extract the first column from the row tuple
+                document_titles = [row[0] for row in doc_result.fetchall()]
 
             # --- THE DOUBLE SHIELD PIPELINE ---
 
@@ -99,7 +107,10 @@ class ChatWorker:
                 # We only pay the LLM latency cost if we are GUARANTEED to hit Qdrant
                 logger.info("Query requires search. Rewriting context...")
                 search_query = await self.query_rewriter.rewrite(
-                    query=question, chat_history=chat_history
+                    query=question, 
+                    chat_history=chat_history,
+                    document_titles=document_titles
+
                 )
                 skip_search = False
 

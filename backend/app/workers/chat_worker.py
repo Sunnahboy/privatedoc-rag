@@ -2,6 +2,7 @@ import asyncio
 import logging
 import signal
 
+import httpx
 from aio_pika import IncomingMessage
 from qdrant_client import AsyncQdrantClient
 
@@ -118,6 +119,11 @@ class ChatGenerationService:
         base_retriever = HybridRetriever(
             dense=QdrantRetriever(), sparse=BM25Retriever()
         )
+        logger.info("Initializing global HTTP client...")
+        self.http_client = httpx.AsyncClient(timeout=60.0)
+
+        # Inject the single client into the rewriter (Option A)
+        self.query_rewriter = QueryRewriter(client=self.http_client)
 
         logger.info("Connecting to Centralized Visual API...")
         self.visual_engine = VisualAPIClient()
@@ -132,7 +138,7 @@ class ChatGenerationService:
         self.rag_pipeline = RAGPipeline(
             retriever=base_retriever, multimodal_pipeline=multimodal_pipeline
         )
-        self.query_rewriter = QueryRewriter()
+        
         # Instantiate the Embedder and Router, then pre-compute anchors
         logger.info("Initializing Hybrid Query Router...")
         text_embedder = FastEmbedEmbedder()
@@ -170,10 +176,16 @@ class ChatGenerationService:
             logger.info(
                 "Graceful shutdown initiated. Stopping new message consumption..."
             )
-            await chat_queue.cancel(consumer_tag)
+            try:
+                await asyncio.wait_for(chat_queue.cancel(consumer_tag), timeout=2.0) 
+            except Exception as e:#noqa
+                logger.warning(f"Could not cleanly cancel consumer (broker likely down): {e}")
 
-            if self.query_rewriter:
-                await self.query_rewriter.close()
+            if self.http_client:
+                try:
+                    await asyncio.wait_for(self.http_client.aclose(), timeout=2.0)
+                except Exception as e:  # noqa
+                    logger.warning(f"Failed to close HTTP client: {e}")
             if self.rag_pipeline:
                 await self.rag_pipeline.close()
             if self.qdrant_client:
