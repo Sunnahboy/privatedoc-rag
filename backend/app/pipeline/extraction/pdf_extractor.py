@@ -115,13 +115,31 @@ class PDFExtractor(BaseExtractor):
             )
 
             result = self.converter.convert(str(temp_path))
-            markdown_content = result.document.export_to_markdown()
+            document = result.document
+
+            # Export markdown per-page so downstream cleaning/chunking can
+            # keep an accurate page_boundaries list. Exporting the whole
+            # document in one call collapses `pages` to a single string,
+            # which makes every chunk resolve to page 1.
+            page_numbers = sorted(document.pages.keys()) if document.pages else []
+            if page_numbers:
+                pages = [
+                    document.export_to_markdown(page_no=page_no)
+                    for page_no in page_numbers
+                ]
+            else:
+                # Fallback for documents where Docling didn't populate
+                # per-page metadata (e.g. very small/edge-case PDFs).
+                pages = [document.export_to_markdown()]
+
+            total_chars = sum(len(page) for page in pages)
             logger.info(
-                f"[Docling] Success! Extracted {len(markdown_content)} characters of markdown."
+                f"[Docling] Success! Extracted {total_chars} characters of markdown "
+                f"across {len(pages)} page(s)."
             )
 
             return ExtractionResult(
-                pages=[markdown_content],
+                pages=pages,
                 total_pages=actual_total_pages,
                 toc=[],
                 metadata={},
