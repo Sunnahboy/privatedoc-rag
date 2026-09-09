@@ -7,45 +7,55 @@ from app.models.chat import ChatMessage
 
 logger = logging.getLogger(__name__)
 
-REWRITE_PROMPT = """You are a specialized query transformation engine. 
-Your ONLY job is to read a brief conversation, look at the user's vague follow-up question, and rewrite it into a standalone search query. 
-Do not answer the question. Do not summarize the text. Only output the rewritten search query.
+REWRITE_PROMPT = """You are a specialized query transformation engine.
+Your ONLY job is to rewrite the follow-up question into a comprehensive search query incorporating ALL active document titles provided below. 
+Do not drop any document names.
 
-Example 1:
-Conversation:
-User: How does Kubernetes handle networking?
-Assistant: It uses the CNI (Container Network Interface)...
-Follow-up: Give me an example of that.
-Standalone: Give me an example of Kubernetes CNI (Container Network Interface) networking.
-
-Example 2:
-Conversation:
+<context>
 {chat_history}
+</context>
+
+Active Documents:
+{doc_context}
+
 Follow-up: {query}
 Standalone:"""
 
 
 class QueryRewriter:
-    def __init__(self, timeout: float = 60.0) -> None:
+    def __init__(self, client: httpx.AsyncClient) -> None:
         self.base_url = settings.ollama_url.rstrip("/")
         # Reuse Gemma 3:4b already pinned in VRAM
         self.model = settings.generation_model
-        self.client = httpx.AsyncClient(timeout=timeout)
+        self.client = client
 
     async def rewrite(
-        self, query: str, chat_history: list[ChatMessage] | None = None
+        self,
+        query: str,
+        chat_history: list[ChatMessage] | None = None,
+        document_titles: list[str] | None = None,
     ) -> str:
         # If no history exists, skip inference entirely (0ms latency penalty)
         if not chat_history:
             return query
 
         # Extract only the last 3-4 turns to keep prompt evaluation fast
+        # Format document titles into the context if available
+        # Format document titles into the context if available
+        doc_context = ""
+        if document_titles:
+            doc_list = "\n".join([f"- {title}" for title in document_titles])
+            doc_context = f"Active documents being searched:\n{doc_list}"
+
         recent_history = chat_history[-4:]
         formatted_history = "\n".join(
             f"{msg.role.capitalize()}: {msg.content}" for msg in recent_history
         )
 
-        prompt = REWRITE_PROMPT.format(chat_history=formatted_history, query=query)
+        # Pass doc_context explicitly into format
+        prompt = REWRITE_PROMPT.format(
+            chat_history=formatted_history, query=query, doc_context=doc_context
+        )
 
         payload = {
             "model": self.model,
@@ -54,7 +64,10 @@ class QueryRewriter:
             "keep_alive": -1,  # Keep Gemma hot in VRAM
             "options": {
                 "temperature": 0.0,  # Deterministic output; eliminates creative hallucination
-                "num_predict": 40,  # Search queries rarely exceed 40 tokens
+                "num_predict": 60,  # Search queries rarely exceed 40 tokens
+                # Stop sequences force the model to halt immediately if it tries
+                # to generate conversational filler like a newline or "User:"
+                "stop": ["\n", "User:", "<"],
             },
         }
 
@@ -71,13 +84,6 @@ class QueryRewriter:
                 return rewritten
             return query
 
-        except Exception:
-            # Resiliency: If Ollama times out or errors, fall back to the raw query without crashing
-            logger.exception(
-                "Query rewrite fatally crashed! Falling back to original query."
-            )
+        except (httpx.RequestError, httpx.HTTPStatusError) as e:
+            logger.warning("Query rewrite network error: %s. Falling back.", e)
             return query
-
-    async def close(self) -> None:
-        if not self.client.is_closed:
-            await self.client.aclose()

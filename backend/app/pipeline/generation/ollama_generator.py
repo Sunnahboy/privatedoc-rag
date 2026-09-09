@@ -29,7 +29,7 @@ Instructions:
 1. Grounding: Rely SOLELY on the provided context. No external knowledge, assumptions, or inferences.
 2. Fallback: If the context lacks the answer, output EXACTLY: "The provided documents do not contain enough information to answer this question." If you can answer, NEVER output this phrase.
 3. Specificity: Describe figures, tables, or sections ONLY if explicitly detailed in the context.
-4. Formatting: Use structured Markdown (bullet points, bolding, code blocks).
+4. Formatting: Use structured Markdown (bullet points, bolding, code blocks). Use a Markdown table only when it makes a comparison clearer. Every table MUST use GitHub-Flavored Markdown: put the header, separator, and every data row on separate lines; use an unescaped `|` at the start and end of each row; and include one separator cell (`---`) per header cell. Never place two table rows on the same line.
 5. Opening: Start immediately with a natural summary sentence answering the core question. Omit robotic filler like "Based on the context...".
 
 Prior Conversation:
@@ -51,7 +51,7 @@ Instructions:
 1. Grounding: Rely SOLELY on the provided text and images. No external knowledge or assumptions.
 2. Visual Truth: Treat attached images as the primary source of truth for values, syntax, and charts. Do not substitute visually similar images.
 3. Fallback: If the text and images lack the answer, output EXACTLY: "The provided documents do not contain enough information to answer this question." If you can answer, NEVER output this phrase.
-4. Formatting: Use structured Markdown (headings, lists, code blocks).
+4. Formatting: Use structured Markdown (headings, lists, code blocks). Use a Markdown table only when it makes a comparison clearer. Every table MUST use GitHub-Flavored Markdown: put the header, separator, and every data row on separate lines; use an unescaped `|` at the start and end of each row; and include one separator cell (`---`) per header cell. Never place two table rows on the same line.
 5. Opening: Start immediately with a natural summary sentence answering the core question. Omit robotic filler like "Based on the context...".
 
 Prior Conversation:

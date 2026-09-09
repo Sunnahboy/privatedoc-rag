@@ -664,7 +664,7 @@ function WorkspacePageContent({ id }: { id: string }) {
               onClick={() => setIsAiOpen(true)}
               className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-on-surface transition-colors hover:bg-surface"
             >
-              <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+              <span className="material-symbols-outlined text-[18px]">hub</span>
               RAG Chat
             </button>
           </div>
