@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { useDocuments } from "@/hooks/useDocuments";
@@ -121,6 +122,7 @@ export function RagChat({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const inlineEditTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationRef = useRef<HTMLDivElement | null>(null);
+  const lastConversationScrollTopRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const submitInFlightRef = useRef(false);
 
@@ -177,8 +179,17 @@ export function RagChat({
     const container = conversationRef.current;
     if (!container) return;
     const { scrollTop, scrollHeight, clientHeight } = container;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-    setIsAutoScroll(isNearBottom);
+    const scrollingUp = scrollTop < lastConversationScrollTopRef.current;
+    lastConversationScrollTopRef.current = scrollTop;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 24;
+
+    // Token updates may arrive many times per second. As soon as the user
+    // scrolls upward, stop pinning the conversation to the newest token;
+    // resume only after they intentionally return to the bottom.
+    setIsAutoScroll((current) => {
+      const next = scrollingUp ? false : isAtBottom;
+      return current === next ? current : next;
+    });
   };
 
   // THE FIX: Scroll tracks chatHistory now, not local messages
@@ -525,8 +536,10 @@ export function RagChat({
                         </div>
                       ) : isAiMessage ? (
                         <div className={`relative ${canCollapse && !isExpandedMessage ? "max-h-72 overflow-hidden" : ""}`}>
-                          <div className="prose prose-sm max-w-none text-on-surface prose-p:leading-6 prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-on-surface prose-p:text-on-surface prose-strong:text-on-surface prose-b:text-on-surface prose-em:text-on-surface prose-ul:text-on-surface prose-ol:text-on-surface prose-li:text-on-surface prose-li:marker:text-on-surface-variant prose-a:text-primary prose-code:text-primary prose-code:bg-surface-container-low prose-pre:bg-surface-container-low prose-pre:text-on-surface prose-blockquote:border-primary prose-blockquote:text-on-surface-variant prose-table:border-outline-variant prose-th:border-outline-variant prose-th:text-on-surface prose-td:border-outline-variant prose-td:text-on-surface-variant prose-hr:border-outline-variant">
-                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                          <div className="overflow-x-auto">
+                            <div className="prose prose-sm max-w-none text-on-surface prose-p:leading-6 prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-on-surface prose-p:text-on-surface prose-strong:text-on-surface prose-b:text-on-surface prose-em:text-on-surface prose-ul:text-on-surface prose-ol:text-on-surface prose-li:text-on-surface prose-li:marker:text-on-surface-variant prose-a:text-primary prose-code:text-primary prose-code:bg-surface-container-low prose-pre:bg-surface-container-low prose-pre:text-on-surface prose-blockquote:border-primary prose-blockquote:text-on-surface-variant prose-table:border-outline-variant prose-th:border-outline-variant prose-th:text-on-surface prose-td:border-outline-variant prose-td:text-on-surface-variant prose-hr:border-outline-variant">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                            </div>
                           </div>
                           {canCollapse && !isExpandedMessage && (
                             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-chat-focus to-transparent" />
