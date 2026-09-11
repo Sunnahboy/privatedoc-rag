@@ -50,6 +50,12 @@ interface WorkspaceContextValue {
    */
   deleteSession: (sessionId: string) => Promise<void>;
 
+  /** Renames a session's title, updating the sidebar optimistically. */
+  renameSession: (sessionId: string, title: string) => Promise<void>;
+
+  /** Pins/unpins a session so it sorts to the top of the sidebar. */
+  setSessionPinned: (sessionId: string, pinned: boolean) => Promise<void>;
+
   /** Whether the Chat History sidebar is visible in Chat Focus mode. */
   isChatSidebarOpen: boolean;
   setIsChatSidebarOpen: (open: boolean) => void;
@@ -161,6 +167,37 @@ export function WorkspaceProvider({
     [activeChatSessionId, setActiveChatSessionId, refreshSessions],
   );
 
+  const renameSession = useCallback(
+    async (sessionId: string, title: string) => {
+      const previous = sessions;
+      setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title } : s)));
+      try {
+        await apiClient.updateChatSession(sessionId, { title });
+      } catch (err) {
+        console.error("Failed to rename chat session", err);
+        setSessions(previous);
+      }
+    },
+    [sessions],
+  );
+
+  const setSessionPinned = useCallback(
+    async (sessionId: string, pinned: boolean) => {
+      const previous = sessions;
+      setSessions((prev) => {
+        const next = prev.map((s) => (s.id === sessionId ? { ...s, is_pinned: pinned } : s));
+        return next.slice().sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned));
+      });
+      try {
+        await apiClient.updateChatSession(sessionId, { is_pinned: pinned });
+      } catch (err) {
+        console.error("Failed to update pinned state", err);
+        setSessions(previous);
+      }
+    },
+    [sessions],
+  );
+
   const value = useMemo<WorkspaceContextValue>(
     () => ({
       activeDocumentId,
@@ -176,6 +213,8 @@ export function WorkspaceProvider({
       refreshSessions,
       startNewChat,
       deleteSession,
+      renameSession,
+      setSessionPinned,
       isChatSidebarOpen,
       setIsChatSidebarOpen,
     }),
@@ -190,6 +229,8 @@ export function WorkspaceProvider({
       refreshSessions,
       startNewChat,
       deleteSession,
+      renameSession,
+      setSessionPinned,
       isChatSidebarOpen,
     ],
   );

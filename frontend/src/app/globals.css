@@ -280,3 +280,15 @@ body {
 
 .reader-resize-handle-col.right-0 > span { right: 2px; }
 .reader-resize-handle-col.left-0 > span { left: 2px; }
+
+.pdf-citation-highlight {
+  background-color: rgba(250, 204, 21, 0.55);
+  color: inherit;
+  border-radius: 2px;
+  animation: pdf-citation-highlight-pulse 1s ease-out 1;
+}
+
+@keyframes pdf-citation-highlight-pulse {
+  0% { background-color: rgba(250, 204, 21, 0.9); }
+  100% { background-color: rgba(250, 204, 21, 0.55); }
+}

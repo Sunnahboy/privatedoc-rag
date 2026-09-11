@@ -92,6 +92,7 @@ class MarkdownSemanticChunker(BaseChunker):
     ) -> list[Chunk]:
         pages = getattr(cleaning_result, "pages", None)
         page_boundaries: list[int] = []
+        page_numbers = list(getattr(cleaning_result, "page_numbers", []) or [])
 
         if pages:
             offset = 0
@@ -101,6 +102,11 @@ class MarkdownSemanticChunker(BaseChunker):
                 offset += len(page) + 2
                 page_boundaries.append(offset)
             content = "\n\n".join(pages)
+            # `page_numbers` must line up 1:1 with `pages` to resolve real page
+            # numbers below. Older/non-PDF extractors that don't populate it
+            # fall back to the previous sequential assumption.
+            if len(page_numbers) != len(pages):
+                page_numbers = list(range(1, len(pages) + 1))
         elif getattr(cleaning_result, "text", None):
             content = cleaning_result.text
         elif getattr(cleaning_result, "cleaned_text", None):
@@ -119,6 +125,7 @@ class MarkdownSemanticChunker(BaseChunker):
             content,
             doc_id,
             page_boundaries,
+            page_numbers,
         )
 
     def _sync_chunk(
@@ -126,16 +133,15 @@ class MarkdownSemanticChunker(BaseChunker):
         text: str,
         document_id: str,
         page_boundaries: list[int],
+        page_numbers: list[int],
     ) -> list[Chunk]:
         chunks: list[Chunk] = []
         header_stack: list[_Header] = []
 
         for section in self._iter_sections(text, header_stack):
             for span in self._iter_chunk_spans(text, section.span):
-                page_number = (
-                    bisect.bisect_right(page_boundaries, span.start) + 1
-                    if page_boundaries
-                    else None
+                page_number = self._resolve_page_number(
+                    page_boundaries, page_numbers, span.start, span.end
                 )
                 chunks.append(
                     Chunk(
@@ -151,6 +157,43 @@ class MarkdownSemanticChunker(BaseChunker):
                 )
 
         return chunks
+
+    @staticmethod
+    def _resolve_page_number(
+        page_boundaries: list[int],
+        page_numbers: list[int],
+        start: int,
+        end: int,
+    ) -> int | None:
+        """Maps a chunk's [start, end) span to the page holding most of its characters.
+
+        A chunk_size of 2000+ chars routinely spans a whole PDF page, so
+        attributing the chunk to whichever page merely contains `start` would
+        often point at a page that holds only the chunk's first sentence.
+        """
+        if not page_boundaries or not page_numbers:
+            return None
+
+        start_index = min(bisect.bisect_right(page_boundaries, start), len(page_numbers) - 1)
+        end_index = min(
+            bisect.bisect_right(page_boundaries, max(start, end - 1)),
+            len(page_numbers) - 1,
+        )
+
+        if start_index == end_index:
+            return page_numbers[start_index]
+
+        best_index = start_index
+        best_overlap = -1
+        for index in range(start_index, end_index + 1):
+            page_start = page_boundaries[index - 1] if index > 0 else 0
+            page_end = page_boundaries[index]
+            overlap = min(end, page_end) - max(start, page_start)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_index = index
+
+        return page_numbers[best_index]
 
     def _iter_sections(
         self, text: str, header_stack: list[_Header]

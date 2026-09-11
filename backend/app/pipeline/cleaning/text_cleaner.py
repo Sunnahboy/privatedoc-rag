@@ -69,6 +69,8 @@ class TextCleaner(BaseCleaner):
             total_original_length += orig_len
             total_cleaned_length += clean_len
 
+        page_numbers = list(getattr(extraction, "page_numbers", []) or [])
+
         return CleaningResult(
             pages=cleaned_pages,
             removed_blank_lines=total_removed_lines,
@@ -76,4 +78,5 @@ class TextCleaner(BaseCleaner):
                 "original_length": total_original_length,
                 "cleaned_length": total_cleaned_length,
             },
+            page_numbers=page_numbers,
         )

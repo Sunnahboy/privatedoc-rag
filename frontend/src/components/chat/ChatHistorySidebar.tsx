@@ -54,6 +54,7 @@ function groupSessions(sessions: ChatSessionSummary[], documentTitleFor: (id: st
 
 interface ChatSessionMenuProps {
   isOpen: boolean;
+  isPinned: boolean;
   onOpen: () => void;
   onClose: () => void;
   onRename: () => void;
@@ -62,7 +63,7 @@ interface ChatSessionMenuProps {
 }
 
 /** The vertical 3-dot trigger + floating menu for a single chat row's actions. */
-function ChatSessionMenu({ isOpen, onOpen, onClose, onRename, onPin, onDelete }: ChatSessionMenuProps) {
+function ChatSessionMenu({ isOpen, isPinned, onOpen, onClose, onRename, onPin, onDelete }: ChatSessionMenuProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -135,7 +136,7 @@ function ChatSessionMenu({ isOpen, onOpen, onClose, onRename, onPin, onDelete }:
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-on-surface transition-colors hover:bg-surface-container"
           >
             <span aria-hidden="true">📌</span>
-            Pin chat
+            {isPinned ? "Unpin chat" : "Pin chat"}
           </button>
           <button
             type="button"
@@ -164,17 +165,29 @@ export function ChatHistorySidebar({ activeDocumentId, className }: ChatHistoryS
     setActiveChatSessionId,
     startNewChat,
     deleteSession,
+    renameSession,
+    setSessionPinned,
     setIsChatSidebarOpen,
   } = useWorkspace();
   const { documents } = useDocuments({ autoFetch: true });
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const documentTitleFor = useMemo(() => {
     const byId = new Map(documents.map((doc) => [doc.document_id, doc.original_filename]));
     return (id: string) => byId.get(id) ?? "Unknown document";
   }, [documents]);
 
-  const groups = useMemo(() => groupSessions(sessions, documentTitleFor), [sessions, documentTitleFor]);
+  const pinnedSessions = useMemo(() => sessions.filter((s) => s.is_pinned), [sessions]);
+  const unpinnedSessions = useMemo(() => sessions.filter((s) => !s.is_pinned), [sessions]);
+  const groups = useMemo(() => groupSessions(unpinnedSessions, documentTitleFor), [unpinnedSessions, documentTitleFor]);
+
+  useEffect(() => {
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [renamingSessionId]);
 
   const handleNewChat = async () => {
     if (activeDocumentId) {
@@ -182,6 +195,85 @@ export function ChatHistorySidebar({ activeDocumentId, className }: ChatHistoryS
     } else {
       await startNewChat("ALL_DOCUMENTS", []);
     }
+  };
+
+  const startRename = (session: ChatSessionSummary) => {
+    setRenamingSessionId(session.id);
+    setRenameDraft(session.title?.trim() || "");
+  };
+
+  const commitRename = () => {
+    if (renamingSessionId) {
+      const title = renameDraft.trim();
+      if (title) {
+        void renameSession(renamingSessionId, title);
+      }
+    }
+    setRenamingSessionId(null);
+  };
+
+  const cancelRename = () => {
+    setRenamingSessionId(null);
+    setRenameDraft("");
+  };
+
+  const renderSessionRow = (session: ChatSessionSummary) => {
+    const isActive = session.id === activeChatSessionId;
+    const isRenaming = renamingSessionId === session.id;
+
+    return (
+      <div
+        key={session.id}
+        className={`group relative flex items-center gap-1 rounded-md pr-1 transition-colors ${
+          isActive ? "bg-primary/10" : "hover:bg-surface-container-low"
+        }`}
+      >
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            value={renameDraft}
+            onChange={(event) => setRenameDraft(event.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitRename();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                cancelRename();
+              }
+            }}
+            className="min-w-0 flex-1 rounded-md border border-primary/40 bg-surface-elevated px-2 py-1.5 text-sm text-on-surface outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setActiveChatSessionId(session.id)}
+            aria-current={isActive ? "true" : undefined}
+            className={`min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+              isActive ? "font-medium text-primary" : "text-on-surface/85 group-hover:text-primary"
+            }`}
+          >
+            {session.is_pinned && (
+              <span className="mr-1 align-middle text-[11px]" aria-hidden="true">📌</span>
+            )}
+            {session.title?.trim() || "New Chat"}
+          </button>
+        )}
+        {!isRenaming && (
+          <ChatSessionMenu
+            isOpen={openMenuSessionId === session.id}
+            isPinned={session.is_pinned}
+            onOpen={() => setOpenMenuSessionId(session.id)}
+            onClose={() => setOpenMenuSessionId((current) => (current === session.id ? null : current))}
+            onRename={() => startRename(session)}
+            onPin={() => void setSessionPinned(session.id, !session.is_pinned)}
+            onDelete={() => void deleteSession(session.id)}
+          />
+        )}
+      </div>
+    );
   };
 
   return (
@@ -226,46 +318,23 @@ export function ChatHistorySidebar({ activeDocumentId, className }: ChatHistoryS
           </p>
         ) : (
           <div className="flex flex-col gap-4">
+            {pinnedSessions.length > 0 && (
+              <div>
+                <p className="mb-1 truncate px-1 text-xs font-medium text-on-surface-variant/80">
+                  Pinned
+                </p>
+                <div className="flex flex-col gap-0.5">
+                  {pinnedSessions.map(renderSessionRow)}
+                </div>
+              </div>
+            )}
             {groups.map((group) => (
               <div key={group.key}>
                 <p className="mb-1 truncate px-1 text-xs font-medium text-on-surface-variant/80">
                   {group.label}
                 </p>
                 <div className="flex flex-col gap-0.5">
-                  {group.sessions.map((session) => {
-                    const isActive = session.id === activeChatSessionId;
-                    return (
-                      <div
-                        key={session.id}
-                        className={`group relative flex items-center gap-1 rounded-md pr-1 transition-colors ${
-                          isActive
-                            ? "bg-primary/10"
-                            : "hover:bg-surface-container-low"
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setActiveChatSessionId(session.id)}
-                          aria-current={isActive ? "true" : undefined}
-                          className={`min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                            isActive
-                              ? "font-medium text-primary"
-                              : "text-on-surface/85 group-hover:text-primary"
-                          }`}
-                        >
-                          {session.title?.trim() || "New Chat"}
-                        </button>
-                        <ChatSessionMenu
-                          isOpen={openMenuSessionId === session.id}
-                          onOpen={() => setOpenMenuSessionId(session.id)}
-                          onClose={() => setOpenMenuSessionId((current) => (current === session.id ? null : current))}
-                          onRename={() => console.log("[ChatHistorySidebar] Rename chat (placeholder):", session.id)}
-                          onPin={() => console.log("[ChatHistorySidebar] Pin chat (placeholder):", session.id)}
-                          onDelete={() => void deleteSession(session.id)}
-                        />
-                      </div>
-                    );
-                  })}
+                  {group.sessions.map(renderSessionRow)}
                 </div>
               </div>
             ))}

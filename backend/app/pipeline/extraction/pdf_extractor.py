@@ -143,6 +143,7 @@ class PDFExtractor(BaseExtractor):
                 total_pages=actual_total_pages,
                 toc=[],
                 metadata={},
+                page_numbers=page_numbers,
             )
         finally:
             if source_doc is not None:

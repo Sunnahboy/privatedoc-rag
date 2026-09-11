@@ -41,6 +41,7 @@ export interface Citation {
     chunk_index: number;
     text: string;
     score: number;
+    page_number: number | null;
 }
 
 export interface RagResponse {
@@ -56,6 +57,7 @@ export interface ChatSessionSummary {
     title: string | null;
     scope_type: ChatScopeType;
     document_ids: string[];
+    is_pinned: boolean;
     created_at: string;
 }
 
@@ -283,6 +285,22 @@ export const apiClient = {
         if (!response.ok) {
             throw new Error(`Failed to delete chat session: ${response.status}`);
         }
+    },
+
+    async updateChatSession(
+        sessionId: string,
+        updates: { title?: string; is_pinned?: boolean },
+    ): Promise<ChatSessionSummary> {
+        const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updates),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to update chat session: ${response.status}`);
+        }
+        return response.json();
     },
 
     async truncateChatHistory(sessionId: string, messageId: string): Promise<void> {

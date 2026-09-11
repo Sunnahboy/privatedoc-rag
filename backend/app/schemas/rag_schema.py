@@ -12,6 +12,7 @@ class CitationResponse(BaseModel):
     chunk_index: int
     text: str
     score: float
+    page_number: int | None = None
 
 
 class AskResponse(BaseModel):

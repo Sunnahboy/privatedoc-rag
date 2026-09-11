@@ -11,6 +11,13 @@ class CreateSessionRequest(BaseModel):
     document_ids: list[str] = []
 
 
+class UpdateSessionRequest(BaseModel):
+    """Partial update for a chat session - only provided fields are changed."""
+
+    title: str | None = None
+    is_pinned: bool | None = None
+
+
 # The Incoming Request (What the frontend POSTs to FastAPI)
 class ChatMessageRequest(BaseModel):
     session_id: str
@@ -46,6 +53,7 @@ class ChatSessionResponse(BaseModel):
     title: str | None
     scope_type: ChatScope
     document_ids: list[str]
+    is_pinned: bool
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

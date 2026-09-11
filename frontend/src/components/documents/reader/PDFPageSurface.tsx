@@ -1,7 +1,9 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { Page } from "react-pdf";
+
+import { createHighlightTextRenderer, type PageHighlight } from "./highlightText";
 
 interface PDFPageSurfaceProps {
   pageNumber: number;
@@ -9,6 +11,7 @@ interface PDFPageSurfaceProps {
   ariaLabel: string;
   pageAspectRatio?: number;
   className?: string;
+  highlight?: PageHighlight | null;
 }
 
 const DEFAULT_ASPECT_RATIO = 1.414;
@@ -21,8 +24,13 @@ const PDFPageSurface = memo(function PDFPageSurface({
   ariaLabel,
   pageAspectRatio = DEFAULT_ASPECT_RATIO,
   className,
+  highlight = null,
 }: PDFPageSurfaceProps) {
   const height = width * pageAspectRatio;
+  const customTextRenderer = useMemo(
+    () => createHighlightTextRenderer(highlight),
+    [highlight],
+  );
 
   return (
     <div
@@ -36,6 +44,7 @@ const PDFPageSurface = memo(function PDFPageSurface({
         width={width}
         renderTextLayer
         renderAnnotationLayer
+        customTextRenderer={customTextRenderer}
         loading={
           <div
             className="flex items-center justify-center text-sm text-on-surface-variant"

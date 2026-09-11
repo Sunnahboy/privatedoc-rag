@@ -170,9 +170,11 @@ class OllamaGenerator(BaseGenerator):
                             record_ollama_metrics(data)
                             citations_dict = [
                                 {
+                                    "document_id": chunk.document_id,
                                     "text": chunk.text,
                                     "score": chunk.score,
                                     "chunk_index": chunk.chunk_index,
+                                    "page_number": chunk.page_number,
                                 }
                                 for chunk in context
                             ]

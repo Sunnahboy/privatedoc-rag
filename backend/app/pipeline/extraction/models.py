@@ -18,3 +18,7 @@ class ExtractionResult:
     total_pages: int
     toc: list[dict[str, Any]] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    # The real page number backing each entry in `pages` (e.g. Docling's own
+    # page keys). Extractors can skip pages, so `pages[i]` is not always
+    # page `i + 1` - callers must use this instead of the array index.
+    page_numbers: list[int] = field(default_factory=list)
