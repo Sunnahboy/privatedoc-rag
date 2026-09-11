@@ -12,6 +12,8 @@ import { normalizeDocumentStatus, type ChatScopeType } from "@/lib/api-client";
 interface RagChatProps {
   documentId?: string;
   currentPage?: number;
+  /** Jumps the PDF viewer to a citation's source page (deep-linking). */
+  onNavigateToPage?: (page: number, citationText?: string) => void;
   selectedText?: string | null;
   showDocumentSelector?: boolean;
   isExpanded?: boolean;
@@ -56,6 +58,7 @@ function formatMessageTime(createdAt?: string) {
 export function RagChat({
   documentId,
   currentPage,
+  onNavigateToPage,
   selectedText,
   showDocumentSelector = true,
   isExpanded = false,
@@ -118,6 +121,8 @@ export function RagChat({
   const [inlineEditText, setInlineEditText] = useState("");
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
   const [isAutoScroll, setIsAutoScroll] = useState(true);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const copiedMessageTimeoutRef = useRef<number | null>(null);
   
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const inlineEditTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -208,6 +213,14 @@ export function RagChat({
     textarea.style.overflowY = "hidden";
   }, [editingMessageId, inlineEditText]);
 
+  useEffect(() => {
+    return () => {
+      if (copiedMessageTimeoutRef.current !== null) {
+        window.clearTimeout(copiedMessageTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleEdit = (messageId: string) => {
     const message = chatHistory.find((item) => item.id === messageId && item.role === "user");
     if (!message) return;
@@ -226,8 +239,16 @@ export function RagChat({
     setInlineEditText("");
   };
 
-  const copyMessageText = async (content: string) => {
+  const copyMessageText = async (messageId: string, content: string) => {
     await navigator.clipboard.writeText(content);
+    if (copiedMessageTimeoutRef.current !== null) {
+      window.clearTimeout(copiedMessageTimeoutRef.current);
+    }
+    setCopiedMessageId(messageId);
+    copiedMessageTimeoutRef.current = window.setTimeout(() => {
+      setCopiedMessageId(null);
+      copiedMessageTimeoutRef.current = null;
+    }, 1500);
   };
 
   const runContextAction = (prompt: string) => {
@@ -588,9 +609,23 @@ export function RagChat({
                         <div className="mt-2 space-y-2 pl-1">
                           {message.citations.map((citation, index) => (
                             <details key={`${message.id}-${index}`} className="rounded-lg bg-surface-container-low px-2.5 py-2">
-                              <summary className="cursor-pointer list-none text-on-surface-variant">
-                                <span className="mr-2 text-primary">[{index + 1}]</span>
-                                Source · chunk {citation.chunk_index}
+                              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-on-surface-variant">
+                                <span>
+                                  <span className="mr-2 text-primary">[{index + 1}]</span>
+                                  Source · chunk {citation.chunk_index}
+                                </span>
+                                {citation.page_number != null && (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      onNavigateToPage?.(citation.page_number as number, citation.text);
+                                    }}
+                                    className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                                  >
+                                    Page {citation.page_number}
+                                  </button>
+                                )}
                               </summary>
                               <p className="mt-2 leading-5 text-on-surface-variant/80">“{citation.text}”</p>
                               <p className="mt-1 text-[10px] text-on-surface-variant/60">Relevance {citation.score.toFixed(3)}</p>
@@ -604,7 +639,20 @@ export function RagChat({
                       <div className="mt-1 flex items-end justify-between gap-4 opacity-0 transition-opacity group-hover:opacity-100">
                         <span className="text-[10px] text-on-surface-variant/60">{formatMessageTime(message.created_at)}</span>
                         <div className="flex items-center gap-3">
-                          <button type="button" onClick={() => void copyMessageText(message.content)} className="text-on-surface-variant/60 transition-colors hover:text-on-surface focus-visible:outline-none"><span className="material-symbols-outlined text-[16px]">content_copy</span></button>
+                          <button
+                            type="button"
+                            onClick={() => void copyMessageText(message.id, message.content)}
+                            className="text-on-surface-variant/60 transition-colors hover:text-on-surface focus-visible:outline-none"
+                          >
+                            {copiedMessageId === message.id ? (
+                              <span className="flex items-center gap-1 text-[10px] font-medium text-success">
+                                <span className="material-symbols-outlined text-[16px]">check</span>
+                                Copied
+                              </span>
+                            ) : (
+                              <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                            )}
+                          </button>
                           {message.role === "user" && (
                             <button type="button" onClick={() => handleEdit(message.id)} className="text-on-surface-variant/60 transition-colors hover:text-on-surface focus-visible:outline-none"><span className="material-symbols-outlined text-[16px]">edit</span></button>
                           )}
