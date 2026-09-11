@@ -35,6 +35,7 @@ class TantivyIndexer(BaseSparseIndex):
         )
         self.chunk_index = builder.add_integer_field("chunk_index", stored=True)
         self.text = builder.add_text_field("text", stored=True)
+        self.page_number = builder.add_integer_field("page_number", stored=True)
 
         self.schema = builder.build()
 
@@ -72,6 +73,8 @@ class TantivyIndexer(BaseSparseIndex):
             doc.add_text("chunk_id", chunk.chunk_id)
             doc.add_integer("chunk_index", chunk.chunk_index)
             doc.add_text("text", chunk.text)
+            if chunk.page_number is not None:
+                doc.add_integer("page_number", chunk.page_number)
 
             writer.add_document(doc)
         writer.commit()
@@ -122,6 +125,7 @@ class TantivyIndexer(BaseSparseIndex):
         results: list[RetrievedChunk] = []
         for score, doc_address in hits.hits:
             doc = self.searcher.doc(doc_address)
+            page_number_values = doc["page_number"]
             results.append(
                 RetrievedChunk(
                     chunk_id=doc["chunk_id"][0],
@@ -129,6 +133,7 @@ class TantivyIndexer(BaseSparseIndex):
                     chunk_index=doc["chunk_index"][0],
                     text=doc["text"][0],
                     score=score,
+                    page_number=page_number_values[0] if page_number_values else None,
                 )
             )
         return results
