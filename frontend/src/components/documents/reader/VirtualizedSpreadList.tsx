@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import PDFSpread from "./PDFSpread";
 import { getSpreadPages } from "./readerModel";
 import type { WindowRange } from "./readerTypes";
+import type { PageHighlight } from "./highlightText";
 
 interface VirtualizedSpreadListProps {
   spreadCount: number;
@@ -14,6 +15,7 @@ interface VirtualizedSpreadListProps {
   verticalGap: number;
   gutter: number;
   windowRange: WindowRange;
+  highlight?: PageHighlight | null;
 }
 
 export default function VirtualizedSpreadList({
@@ -24,6 +26,7 @@ export default function VirtualizedSpreadList({
   verticalGap,
   gutter,
   windowRange,
+  highlight = null,
 }: VirtualizedSpreadListProps) {
   if (!totalPages) {
     return null;
@@ -41,6 +44,7 @@ export default function VirtualizedSpreadList({
         pageWidth={pageWidth}
         pageAspectRatio={pageAspectRatio}
         gutter={gutter}
+        highlight={highlight}
       />,
     );
   }
