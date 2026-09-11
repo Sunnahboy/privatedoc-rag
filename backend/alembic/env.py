@@ -1,17 +1,18 @@
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
-from app.config import settings
-from app.database import Base
-from app.models.document import Document  # noqa: F401
-import app.models.chat  # noqa: F401
 # This import invisibly populates Base.metadata
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 
 # IMPORT THE ASYNC ENGINE BUILDER
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+import app.models.chat  # noqa: F401
+from alembic import context
+from app.config import settings
+from app.database import Base
+from app.models.document import Document  # noqa: F401
 
 config = context.config
 
