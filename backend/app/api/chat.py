@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,11 +11,12 @@ from app.schemas.chat_schema import (
     ChatMessageResponse,
     ChatSessionResponse,
     CreateSessionRequest,
+    UpdateSessionRequest,
 )
 
 router = APIRouter(prefix="/chat", tags=["Chat History"])
 
-# The linter ignores 
+# The linter ignores
 DatabaseDep = Annotated[AsyncSession, Depends(get_db)]
 
 
@@ -42,10 +43,36 @@ async def create_session(
 
 @router.get("/sessions", response_model=list[ChatSessionResponse])
 async def get_all_sessions(db: DatabaseDep):
-    """Returns all chat sessions for the Chat Focus sidebar."""
-    stmt = select(ChatSession).order_by(desc(ChatSession.created_at))
+    """Returns all chat sessions for the Chat Focus sidebar, pinned first."""
+    stmt = select(ChatSession).order_by(
+        desc(ChatSession.is_pinned), desc(ChatSession.created_at)
+    )
     result = await db.execute(stmt)
     return result.scalars().all()
+
+
+@router.patch("/sessions/{session_id}", response_model=ChatSessionResponse)
+async def update_session(
+    session_id: str,
+    request: UpdateSessionRequest,
+    db: DatabaseDep,
+):
+    """Renames a session and/or toggles its pinned state."""
+    session = await db.get(ChatSession, session_id)
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
+
+    if request.title is not None:
+        trimmed = request.title.strip()
+        session.title = trimmed or "New Chat"
+    if request.is_pinned is not None:
+        session.is_pinned = request.is_pinned
+
+    await db.commit()
+    await db.refresh(session)
+    return session
 
 
 @router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageResponse])
@@ -95,7 +122,9 @@ async def truncate_chat_history(session_id: str, message_id: str, db: DatabaseDe
     target_msg = result.scalars().first()
 
     if not target_msg:
-        raise HTTPException(status_code=404, detail="Message not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
+        )
 
     # Delete it and everything created after it in this session
     delete_stmt = delete(ChatMessage).filter(
