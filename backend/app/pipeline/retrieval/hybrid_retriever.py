@@ -9,7 +9,7 @@ from .exceptions import RetrievalError
 from .flashrank_reranker import FlashRankReranker
 from .fusion.rrf import RRFFusion
 from .interface import BaseReranker, BaseRetriever
-from .models import RetrievalResult
+from .models import RetrievalResult, RetrievedChunk
 from .qdrant_retriever import QdrantRetriever
 
 
@@ -89,6 +89,7 @@ class HybridRetriever(BaseRetriever):
                     dense_result.chunks,
                     sparse_result.chunks,
                 )
+                fused_chunks = self._dedupe_by_text(fused_chunks)
 
             with profile("Cross-Encoder Reranking"):
                 # Pass the query, the broad fused chunks, and the final limit (e.g., 5)
@@ -104,3 +105,18 @@ class HybridRetriever(BaseRetriever):
             sparse_hits=len(sparse_result.chunks),
             fused_hits=len(fused_chunks),
         )
+
+    @staticmethod
+    def _dedupe_by_text(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+        """Drops repeat chunks with identical text (e.g. duplicate vectors, or
+        Docling attributing the same block to two adjacent pages) so citations
+        don't show the same source twice."""
+        seen: set[tuple[str, str]] = set()
+        deduped: list[RetrievedChunk] = []
+        for chunk in chunks:
+            key = (chunk.document_id, " ".join(chunk.text.split()).lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(chunk)
+        return deduped
