@@ -173,6 +173,7 @@ function WorkspacePageContent({ id }: { id: string }) {
   const [isRagExpanded, setIsRagExpanded] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<number>>(new Set());
   const [layout, setLayout] = useState(getInitialLayout);
+  const [highlight, setHighlight] = useState<{ text: string; token: number } | null>(null);
 
   // The reader's document is the source of truth for activeDocumentId;
   // keep WorkspaceContext in sync so Chat Focus's "New Chat" defaults to it.
@@ -309,6 +310,19 @@ function WorkspacePageContent({ id }: { id: string }) {
       setCurrentPage(resolveNavigationTarget(target, doc?.total_pages));
     },
     [doc?.total_pages],
+  );
+
+  const navigateToCitation = useCallback(
+    (page: number, citationText?: string) => {
+      if (readingMode === "study") {
+        applyReadingMode("normal");
+      }
+      navigateReader({ type: "page", page, source: "citation" });
+      if (citationText) {
+        setHighlight({ text: citationText, token: Date.now() });
+      }
+    },
+    [applyReadingMode, navigateReader, readingMode],
   );
 
   const toggleCollapse = useCallback((index: number, event: MouseEvent<HTMLButtonElement>) => {
@@ -609,6 +623,8 @@ function WorkspacePageContent({ id }: { id: string }) {
             onViewModeChange={setViewMode}
             onReadingModeChange={applyReadingMode}
             onToggleToolbar={() => setIsReaderToolbarOpen((current) => !current)}
+            highlightText={highlight?.text ?? null}
+            highlightToken={highlight?.token}
           />
         </main>
 
@@ -623,6 +639,7 @@ function WorkspacePageContent({ id }: { id: string }) {
             <RagChat
               documentId={id}
               currentPage={currentPage}
+              onNavigateToPage={navigateToCitation}
               showDocumentSelector={true}
               isExpanded={isRagExpanded}
               onToggleExpanded={() => setIsRagExpanded((current) => !current)}
