@@ -10,6 +10,7 @@ export type ReaderNavigationSource =
   | "search"
   | "bookmark"
   | "annotation"
+  | "citation"
   | "viewport"
   | "external";
 
