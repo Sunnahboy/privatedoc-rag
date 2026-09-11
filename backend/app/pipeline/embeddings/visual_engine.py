@@ -20,19 +20,16 @@ from transformers import BitsAndBytesConfig
 logger = logging.getLogger(__name__)
 
 
-class VisualRetrieverEngine:
-    """
-    Handles lazy initialization, device management, and multi-vector generation
-    using the ColQwen2/ColPali visual retrieval architecture.
-    """
+from pathlib import Path
 
+class VisualRetrieverEngine:
     _model_instance: Any = None
     _processor_instance: Any = None
     _engine_lock = Lock()
 
-    # We default to a 2B model which is realistic for local/self-hosted execution.
-    # You can change this to "vidore/colpali-v1.2" for the 7B Llama vision variant.
-    LOCAL_MODEL_PATH = "./models/colqwen2-v1.0"
+    # THE FIX: 1. Use absolute paths to avoid working-directory bugs
+    # Resolves to privatedoc-rag/backend/models
+    CACHE_DIR = str(Path(__file__).resolve().parent.parent.parent.parent / "models")
     HUB_MODEL_NAME = "vidore/colqwen2-v1.0"
 
     @classmethod
@@ -41,9 +38,7 @@ class VisualRetrieverEngine:
             return
 
         with cls._engine_lock:
-            # Double-checked locking
             if cls._model_instance is None:
-                # 1. Device Detection (CUDA > MPS (Apple Silicon) > CPU)
                 if torch.cuda.is_available():
                     device = torch.device("cuda")
                     logger.info("Initializing Visual Engine on CUDA (NVIDIA GPU).")
@@ -52,39 +47,21 @@ class VisualRetrieverEngine:
                     logger.info("Initializing Visual Engine on MPS (Apple Silicon).")
                 else:
                     device = torch.device("cpu")
-                    logger.warning(
-                        "No GPU found. Initializing Visual Engine on CPU (Very Slow!)."
-                    )
+                    logger.warning("No GPU found. Initializing Visual Engine on CPU (Very Slow!).")
 
                 cls._device = device
 
-                # THE FIX: Auto-Download Logic
-                # Check if the directory exists AND is not empty
-                if not os.path.exists(cls.LOCAL_MODEL_PATH) or not os.listdir(
-                    cls.LOCAL_MODEL_PATH
-                ):
-                    logger.warning(
-                        f"Model weights not found at {cls.LOCAL_MODEL_PATH}."
-                    )
-                    logger.info(
-                        f"Initiating auto-download from {cls.HUB_MODEL_NAME}. This will take a while..."
-                    )
-                    os.makedirs(cls.LOCAL_MODEL_PATH, exist_ok=True)
-                    snapshot_download(
-                        repo_id=cls.HUB_MODEL_NAME,
-                        local_dir=cls.LOCAL_MODEL_PATH,
-                        local_dir_use_symlinks=False,  # Forces actual files to be downloaded, not just cache pointers
-                    )
-                    logger.info("Download complete!")
+                # THE FIX: 2. Delete your manual snapshot_download block entirely.
 
-                # 2. Load the Processor from the local path
-                logger.info(f"Loading processor for {cls.LOCAL_MODEL_PATH}...")
+                # THE FIX: 3. Load using the HUB ID and pass the cache_dir.
+                # It will automatically download if missing, and instantly load if present.
+                logger.info(f"Loading processor for {cls.HUB_MODEL_NAME}...")
                 cls._processor_instance = ColQwen2Processor.from_pretrained(
-                    cls.LOCAL_MODEL_PATH
+                    cls.HUB_MODEL_NAME,
+                    cache_dir=cls.CACHE_DIR
                 )
 
-                # 3. Load the model from the local path
-                logger.info(f"Loading model weights for {cls.LOCAL_MODEL_PATH}...")
+                logger.info(f"Loading model weights for {cls.HUB_MODEL_NAME}...")
                 if cls._device.type == "cuda":
                     quantization_config = BitsAndBytesConfig(
                         load_in_4bit=True,
@@ -94,18 +71,19 @@ class VisualRetrieverEngine:
                         llm_int8_enable_fp32_cpu_offload=True,
                     )
                     cls._model_instance = ColQwen2.from_pretrained(
-                        cls.LOCAL_MODEL_PATH,
+                        cls.HUB_MODEL_NAME, # Use the string "vidore/colqwen2-v1.0"
                         quantization_config=quantization_config,
-                        device_map={"": "cuda"},  # Bypass meta tensors
-                        local_files_only=True,
+                        device_map={"": "cuda"},
+                        cache_dir=cls.CACHE_DIR, # Let HF manage the folder
+                        # local_files_only=True is REMOVED so it can self-heal missing files
                     ).eval()
                     logger.info("Model loaded in 4-bit quantized mode.")
                 else:
                     cls._model_instance = ColQwen2.from_pretrained(
-                        cls.LOCAL_MODEL_PATH,
+                        cls.HUB_MODEL_NAME,
                         torch_dtype=torch.bfloat16,
                         device_map=cls._device,
-                        local_files_only=True,
+                        cache_dir=cls.CACHE_DIR,
                     ).eval()
 
                 logger.info("Visual Retriever Engine loaded successfully.")
