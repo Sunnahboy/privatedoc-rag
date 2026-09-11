@@ -100,6 +100,7 @@ class QdrantRetriever(BaseRetriever):
                         chunk_index=payload["chunk_index"],
                         text=payload["text"],
                         score=point.score,
+                        page_number=payload.get("page_number"),
                     )
                 )
         except Exception as exc:
