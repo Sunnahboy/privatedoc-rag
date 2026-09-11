@@ -11,6 +11,7 @@ import ReaderToolbar from "./ReaderToolbar";
 import VirtualizedPageList from "./VirtualizedPageList";
 import VirtualizedSpreadList from "./VirtualizedSpreadList";
 import { clampPage, getSpreadCount, getSpreadIndexForPage } from "./readerModel";
+import type { PageHighlight } from "./highlightText";
 import type {
   PageChangeOrigin,
   PDFViewMode,
@@ -69,6 +70,9 @@ interface PDFViewerProps {
   onViewModeChange?: (mode: PDFViewMode) => void;
   onReadingModeChange?: (mode: ReaderDisplayMode) => void;
   onToggleToolbar?: () => void;
+  /** Citation text to highlight on `pageNumber`. Paired with `highlightToken` so repeat clicks on the same citation retrigger the flash. */
+  highlightText?: string | null;
+  highlightToken?: number;
 }
 
 export default function PDFViewer({
@@ -84,6 +88,8 @@ export default function PDFViewer({
   onViewModeChange,
   onReadingModeChange,
   onToggleToolbar,
+  highlightText,
+  highlightToken,
 }: PDFViewerProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -92,6 +98,7 @@ export default function PDFViewer({
   const pendingProgrammaticPageRef = useRef<number | null>(null);
   const focusHudTimeoutRef = useRef<number | null>(null);
   const [showFocusHud, setShowFocusHud] = useState(readingMode !== "focus");
+  const [activeHighlight, setActiveHighlight] = useState<PageHighlight | null>(null);
 
   const {
     resolvedPageCount,
@@ -193,6 +200,26 @@ export default function PDFViewer({
     lastViewportPageRef,
     pendingProgrammaticPageRef,
   });
+
+  useEffect(() => {
+    if (!highlightText || !highlightToken) {
+      return;
+    }
+
+    setActiveHighlight({ page: safeCurrentPage, text: highlightText });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightToken]);
+
+  // Clears the highlight once the reader moves off its page (or the page right
+  // after it, since matching tolerates a chunk spilling onto the next page),
+  // instead of on a timer.
+  useEffect(() => {
+    setActiveHighlight((current) =>
+      current && current.page !== safeCurrentPage && current.page + 1 !== safeCurrentPage
+        ? null
+        : current,
+    );
+  }, [safeCurrentPage]);
 
   const clearFocusHudTimeout = useCallback(() => {
     if (focusHudTimeoutRef.current !== null) {
@@ -396,6 +423,7 @@ export default function PDFViewer({
                   width={pageWidth}
                   ariaLabel={`Page ${safeCurrentPage}`}
                   pageAspectRatio={pageAspectRatio}
+                  highlight={activeHighlight}
                 />
               </div>
             )}
@@ -420,6 +448,7 @@ export default function PDFViewer({
                 verticalGap={VERTICAL_PAGE_GAP}
                 gutter={doubleGutter}
                 windowRange={spreadWindow}
+                highlight={activeHighlight}
               />
             ) : null}
 
@@ -430,6 +459,7 @@ export default function PDFViewer({
                 pageAspectRatio={pageAspectRatio}
                 verticalGap={VERTICAL_PAGE_GAP}
                 windowRange={scrollWindow}
+                highlight={activeHighlight}
               />
             ) : null}
           </Document>
