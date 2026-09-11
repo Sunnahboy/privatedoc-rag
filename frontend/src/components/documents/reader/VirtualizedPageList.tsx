@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import PDFPageSurface from "./PDFPageSurface";
 import type { WindowRange } from "./readerTypes";
+import type { PageHighlight } from "./highlightText";
 
 interface VirtualizedPageListProps {
   pageCount: number;
@@ -11,6 +12,7 @@ interface VirtualizedPageListProps {
   pageAspectRatio: number;
   verticalGap: number;
   windowRange: WindowRange;
+  highlight?: PageHighlight | null;
 }
 
 export default function VirtualizedPageList({
@@ -19,6 +21,7 @@ export default function VirtualizedPageList({
   pageAspectRatio,
   verticalGap,
   windowRange,
+  highlight = null,
 }: VirtualizedPageListProps) {
   if (!pageCount) {
     return null;
@@ -34,6 +37,7 @@ export default function VirtualizedPageList({
           width={pageWidth}
           ariaLabel={`Page ${page}`}
           pageAspectRatio={pageAspectRatio}
+          highlight={highlight}
         />
       </div>,
     );
