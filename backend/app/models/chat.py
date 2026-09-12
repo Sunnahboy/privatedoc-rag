@@ -28,6 +28,8 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id = Column(String, primary_key=True, index=True)
+    #  multi-tenant owner lock
+    user_id = Column(String(36), nullable=False, index=True)
     title = Column(String, default="New Chat", nullable=True)
     # The session owns its scope permanently.
     scope_type = Column(
@@ -45,6 +47,8 @@ class ChatMessage(Base):
     session_id = Column(
         String, ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
     )
+    # Explicit ownership for IDOR defense
+    user_id = Column(String(36), nullable=False, index=True)
     role = Column(String, nullable=False)  # 'user' or 'assistant'
     content = Column(Text, nullable=False)
 

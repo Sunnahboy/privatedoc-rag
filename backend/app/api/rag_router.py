@@ -10,6 +10,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from app.api.dependencies import get_current_user
 from app.config import settings
 from app.database import AsyncSessionLocal, get_db
 from app.messaging.publisher import publish_chat_job
@@ -26,12 +27,14 @@ router = APIRouter(
 
 
 async def get_or_create_session(
-    session_id: str | None, payload: AskRequest, db: AsyncSession
+    session_id: str | None, payload: AskRequest, user_id: str, db: AsyncSession
 ) -> ChatSession:
     """Finds existing session (and auto-titles it) or creates a new one with correct scope."""
     if session_id:
         result = await db.execute(
-            select(ChatSession).filter(ChatSession.id == session_id)
+            select(ChatSession).filter(
+                ChatSession.id == session_id, ChatSession.user_id == user_id
+            )
         )
         session = result.scalars().first()
         if session:
@@ -41,6 +44,11 @@ async def get_or_create_session(
                 session.title = " ".join(words[:5]) + ("..." if len(words) > 5 else "")
                 db.add(session)
             return session
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chat session not found or unauthorized.",
+            )
 
     # Fallback: Create a new session if the frontend forgot to initialize one
     new_id = str(uuid.uuid4())
@@ -57,7 +65,11 @@ async def get_or_create_session(
         scope_type = ChatScope.THIS_DOCUMENT
 
     new_session = ChatSession(
-        id=new_id, title=title, scope_type=scope_type, document_ids=payload.document_ids
+        id=new_id,
+        title=title,
+        scope_type=scope_type,
+        document_ids=payload.document_ids,
+        user_id=user_id,
     )
     db.add(new_session)
     await db.commit()
@@ -65,7 +77,7 @@ async def get_or_create_session(
 
 
 async def fetch_sliding_window_history(
-    session_id: str, db: AsyncSession, limit: int = 4
+    session_id: str,user_id: str, db: AsyncSession, limit: int = 4
 ) -> list[ChatMessage]:
     """Fetches the last N messages to prevent LLM context overflow."""
     # BUG FIX: order by `seq` (stable insertion order), not `created_at`,
@@ -73,7 +85,7 @@ async def fetch_sliding_window_history(
     # the note in chat.py's get_recent_messages for full details.
     stmt = (
         select(ChatMessage)
-        .filter(ChatMessage.session_id == session_id)
+        .filter(ChatMessage.session_id == session_id,ChatMessage.user_id == user_id)
         .order_by(desc(ChatMessage.seq))
         .limit(limit)
     )
@@ -87,6 +99,7 @@ async def fetch_sliding_window_history(
 async def ask(
     payload: AskRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user_id: Annotated[str, Depends(get_current_user)],
 ):
     """
     Instantly saves the question, creates a placeholder for the answer,
@@ -96,7 +109,7 @@ async def ask(
     if payload.document_ids:
         # The router delegates business logic to the service
         missing_ids = await document_service.validate_document_ids(
-            payload.document_ids, db
+            payload.document_ids, db, current_user_id
         )
 
         if missing_ids:
@@ -107,7 +120,7 @@ async def ask(
             )
     # Resolve the Chat Session
     active_session = await get_or_create_session(
-        session_id=payload.session_id, payload=payload, db=db
+        session_id=payload.session_id, payload=payload, user_id=current_user_id, db=db
     )
 
     # Save the User's Question instantly
@@ -115,6 +128,7 @@ async def ask(
     user_msg = ChatMessage(
         id=user_msg_id,
         session_id=active_session.id,
+        user_id=current_user_id,
         role="user",
         content=payload.question,
         citations=[],
@@ -127,6 +141,7 @@ async def ask(
     assistant_msg = ChatMessage(
         id=assistant_msg_id,
         session_id=active_session.id,
+        user_id=current_user_id,
         role="assistant",
         content="",
         citations=[],
@@ -142,6 +157,7 @@ async def ask(
     await publish_chat_job(
         message_id=assistant_msg_id,
         session_id=active_session.id,
+        user_id=current_user_id,
         question=payload.question,
         document_ids=payload.document_ids,
     )
@@ -155,15 +171,23 @@ async def ask(
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_chat_session(session_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_chat_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: str = Depends(get_current_user),
+):
     """Deletes an entire chat session and all its messages (via CASCADE)."""
     # 1. Fetch the session
-    stmt = select(ChatSession).filter(ChatSession.id == session_id)
+    stmt = select(ChatSession).filter(
+        ChatSession.id == session_id, ChatSession.user_id == current_user_id
+    )
     result = await db.execute(stmt)
     session = result.scalars().first()
 
     if not session:
-        raise HTTPException(status_code=404, detail="Chat session not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found"
+        )
 
     # 2. Delete it. Postgres CASCADE automatically drops the related chat_messages.
     await db.delete(session)
@@ -182,8 +206,24 @@ valkey_client = redis.from_url(
 
 
 @router.get("/stream/{message_id}")
-async def stream_chat(message_id: str, request: Request, last_offset: str = "0"):
+async def stream_chat(
+    message_id: str,
+    request: Request,
+    current_user_id: Annotated[str, Depends(get_current_user)],
+    last_offset: str = "0",
+):
     stream_key = f"chat:stream:{message_id}"
+    # IDOR DEFENSE (Hard Check): Before we even touch Valkey, verify this user owns this message.
+    async with AsyncSessionLocal() as db:
+        stmt = select(ChatMessage).filter(
+            ChatMessage.id == message_id, ChatMessage.user_id == current_user_id
+        )
+        result = await db.execute(stmt)
+        if not result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: You do not own this message stream.",
+            )
 
     # THE FIX: Reconnects (hard refresh / tab switch / EventSource auto-retry)
     # now ALWAYS replay the stream from the very beginning ("0"), regardless of

@@ -8,7 +8,7 @@ from .tantivy_indexer import TantivyIndexer
 
 
 class CompositeIndexer:
-    """Coordinates indexing into multiple backends."""
+    """Coordinates indexing into multiple backends, enforcing tenant boundaries."""
 
     def __init__(
         self,
@@ -22,9 +22,14 @@ class CompositeIndexer:
         self,
         request: IndexingRequest,
     ) -> IndexingResult:
+        # IDENTITY INJECTION: Extract user_id from the request and pass to Tantivy.
+        # QdrantIndexer will extract it internally from the same request object.
         vector_result, _ = await asyncio.gather(
             self.vector_indexer.index(request),
-            self.sparse_indexer.add_documents(request.chunks),
+            self.sparse_indexer.add_documents(
+               chunks = request.chunks,
+               user_id =request.user_id
+                ),
         )
 
         # Return the vector indexing result for compatibility
@@ -33,10 +38,17 @@ class CompositeIndexer:
     async def delete_document(
         self,
         document_id: str,
+        user_id:str,
     ) -> None:
         await asyncio.gather(
-            self.vector_indexer.delete_document(document_id),
-            self.sparse_indexer.delete_document(document_id),
+            self.vector_indexer.delete_document(
+                document_id= document_id,
+                user_id=user_id,
+                ),
+            self.sparse_indexer.delete_document(
+                document_id=document_id,
+                user_id=user_id,
+                ),
         )
 
     async def close(self) -> None:

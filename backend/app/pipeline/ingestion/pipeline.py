@@ -65,11 +65,14 @@ class IngestionPipeline(BaseIngestionPipeline):
         self,
         document_id: str,
         file_path: str,
+        user_id:str,
     ) -> IngestionResult:
         if not document_id:
             raise IngestionError("Document ID cannot be empty.")
         if not file_path:
             raise IngestionError("File path cannot be empty.")
+        if not user_id:
+            raise IngestionError("User ID cannot be empty.")
 
         benchmark = IngestionBenchmark()
         total_start = time.perf_counter()
@@ -90,7 +93,7 @@ class IngestionPipeline(BaseIngestionPipeline):
                 visual_jobs_count = await self._run_stage(
                     stage_name="visual_detection",
                     action=lambda: self._detect_and_queue_visuals(
-                        document_id, file_path
+                        document_id, file_path,user_id
                     ),
                     error_cls=ExtractionError,  # Grouping with extraction failures
                     error_msg="Failed visual detection and routing.",
@@ -141,6 +144,7 @@ class IngestionPipeline(BaseIngestionPipeline):
                     IndexingRequest(
                         chunks=chunks,
                         embeddings=embeddings,
+                        user_id=user_id, # PROPAGATE IDENTITY TO INDEXERS
                     )
                 ),
                 error_cls=IndexingError,
@@ -168,7 +172,7 @@ class IngestionPipeline(BaseIngestionPipeline):
             IngestionLogger.error(f"Ingestion failed for doc {document_id}: {exc}")
             raise
 
-    async def _detect_and_queue_visuals(self, document_id: str, file_path: str) -> int:
+    async def _detect_and_queue_visuals(self, document_id: str, file_path: str, user_id:str) -> int:
         """Queue each visually rich PDF page for asynchronous processing."""
         doc = fitz.open(file_path)
         visual_jobs = []
@@ -179,6 +183,7 @@ class IngestionPipeline(BaseIngestionPipeline):
                 visual_jobs.append(
                     DocumentVisualJobMessage(
                         document_id=document_id,
+                        user_id=user_id, # PROPAGATE IDENTITY TO VISUAL WORKER
                         page_number=detection.page_number,
                         classification=detection.classification,
                         reasons=detection.reasons,

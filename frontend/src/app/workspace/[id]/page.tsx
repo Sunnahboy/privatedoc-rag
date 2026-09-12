@@ -25,6 +25,7 @@ import {
   type ReaderTocItem,
 } from "@/components/documents/reader/readerModel";
 import { API_BASE_URL } from "@/lib/constants";
+import { apiClient } from "@/lib/api-client";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext";
 
@@ -241,16 +242,7 @@ function WorkspacePageContent({ id }: { id: string }) {
 
   const hydrateDocument = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await fetch(buildReaderRequest(id), { signal });
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error("This document could not be found.");
-        }
-
-        throw new Error("The document is currently unavailable.");
-      }
-
-      const data = (await response.json()) as ReaderDocumentResponse;
+      const data = await apiClient.getReaderDocument(id, signal) as ReaderDocumentResponse;
       setDoc(data);
       setCurrentPage(1);
       setCollapsedSections(new Set());

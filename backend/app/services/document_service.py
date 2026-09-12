@@ -135,7 +135,7 @@ async def _save_file_to_disk(file: UploadFile, saved_path: Path) -> int:
 
 
 async def save_uploaded_document(
-    file: UploadFile, db: AsyncSession
+    file: UploadFile, db: AsyncSession,user_id:str,
 ) -> DocumentUploadResponse:
     """
     Validate, save and persist metadata for an uploaded document asynchronously.
@@ -154,9 +154,12 @@ async def save_uploaded_document(
 
         # 1. Hash the incoming stream & check DB for duplicates
         content_hash = await calculate_upload_stream_hash(file)
-
+        # SECURITY: Deduplication must be scoped to the user. 
+        # User A uploading 'tax.pdf' shouldn't block User B from uploading identical 'tax.pdf'.
         existing_query = await db.execute(
-            select(Document).where(Document.content_hash == content_hash)
+            select(Document).where(
+                Document.content_hash == content_hash),
+                Document.user_id == user_id,#tenant loc
         )
         existing_doc = existing_query.scalars().first()
 
@@ -176,6 +179,7 @@ async def save_uploaded_document(
         # 4. Save to Database
         document = Document(
             id=document_id,
+            user_id=user_id,
             original_filename=original_filename,
             stored_filename=stored_filename,
             file_extension=extension,
@@ -196,9 +200,12 @@ async def save_uploaded_document(
             # Race condition fallback: two users uploaded the same file simultaneously
             await db.rollback()
             saved_path.unlink(missing_ok=True)
-
+            # Re-check the tenant-scoped query in case of a race condition
             race_query = await db.execute(
-                select(Document).where(Document.content_hash == content_hash)
+                select(Document).where(
+                    Document.content_hash == content_hash,
+                    Document.user_id == user_id,
+                )
             )
             race_winner = race_query.scalars().first()
             if race_winner:
@@ -207,9 +214,11 @@ async def save_uploaded_document(
 
         await db.refresh(document)
 
-        # 5. Route to heavy ingestion pipeline
+        # Route to heavy ingestion pipeline
         await publish_ingestion_job(
-            document_id=document.id, storage_key=document.storage_key
+            document_id=document.id, 
+            storage_key=document.storage_key,
+            user_id =user_id,
         )
 
         return _document_to_upload_response(document)
@@ -229,25 +238,27 @@ async def save_uploaded_document(
 
 
 async def get_document_by_id(
-    document_id: str, db: AsyncSession
+    document_id: str, db: AsyncSession, user_id:str
 ) -> DocumentListItem | None:
     """
     Fetch a single document by its ID and return a DocumentListItem schema.
     Used by the frontend polling mechanism to check upload status.
+    
     """
-    stmt = select(Document).where(Document.id == document_id)
+    #SECURITY: Ensure the user owns the document they are polling
+    stmt = select(Document).where(
+        Document.id == document_id,
+        Document.user_id == user_id,
+        )
 
     result = await db.execute(stmt)
     doc = result.scalar_one_or_none()
 
-    if not doc:
-        return None
-
     # Convert ORM model to Pydantic response model to satisfy FastAPI response validation
-    return _document_to_list_item(doc)
+    return _document_to_list_item(doc) if doc else None
 
 
-async def validate_document_ids(requested_ids: list[str], db: AsyncSession) -> set[str]:
+async def validate_document_ids(requested_ids: list[str], db: AsyncSession, user_id:str) -> set[str]:
     """
     Fetches valid IDs in O(1) network calls.
     Returns the set of IDs that were NOT found in the database.
@@ -255,28 +266,34 @@ async def validate_document_ids(requested_ids: list[str], db: AsyncSession) -> s
     if not requested_ids:
         return set()
 
-    stmt = select(Document.id).filter(Document.id.in_(requested_ids))
+    stmt = select(Document.id).filter(
+        Document.id.in_(requested_ids),
+        Document.user_id ==user_id,
+        )
     result = await db.execute(stmt)
     found_ids = set(result.scalars().all())
 
     return set(requested_ids) - found_ids
 
 
-async def list_documents(db: AsyncSession) -> list[DocumentListItem]:
+async def list_documents(db: AsyncSession, user_id:str) -> list[DocumentListItem]:
     """
     Return all uploaded documents.
 
     why ordered newest to first:
      - Users usually care about recently uploaded documents first.
     """
-    result = await db.execute(select(Document).order_by(Document.created_at.desc()))
+    result = await db.execute(
+        select(Document)
+        .where(Document.user_id == user_id)
+        .order_by(Document.created_at.desc()))
 
     Documents = result.scalars().all()
     return [_document_to_list_item(document) for document in Documents]
 
 
 async def delete_document_by_id(
-    document_id: str, db: AsyncSession
+    document_id: str, db: AsyncSession,user_id:str
 ) -> DocumentDeleteResponse:
     """
     Delete one document.
@@ -292,7 +309,12 @@ async def delete_document_by_id(
      - Delete graph entities and relationships.
     """
 
-    document = await db.get(Document, document_id)
+    stmt = select(Document).where(
+        Document.id == document_id,
+        Document.user_id == user_id
+    )
+    result  = await db.execute(stmt)
+    document = result.scalar_one_or_none()
 
     if document is None:
         raise HTTPException(
@@ -301,7 +323,8 @@ async def delete_document_by_id(
         )
     indexer = CompositeIndexer()
     try:
-        await indexer.delete_document(document_id)
+        #NBmust update CompositeIndexer to accept user_id so it deletes from the user's isolated Qdrant/Tantivy space
+        await indexer.delete_document(document_id, user_id=user_id)
         upload_dir = ensure_upload_dir()
         saved_path = upload_dir / document.storage_key
         saved_path.unlink(missing_ok=True)

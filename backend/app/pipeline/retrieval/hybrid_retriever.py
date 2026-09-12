@@ -44,13 +44,16 @@ class HybridRetriever(BaseRetriever):
     async def retrieve(
         self,
         query: str,
+        user_id: str,
         top_k: int | None = None,
-        document_ids: list[str] | None = None, # BUG 1 FIXED: Accept the list
-        limit: int = 5,  
-        **kwargs
+        document_id: str | None = None,
+        document_ids: list[str] | None = None,
+        **kwargs,
     ) -> RetrievalResult:
         if not query or not query.strip():
             raise RetrievalError("Query cannot be empty")
+        if not user_id or not user_id.strip():
+            raise RetrievalError("user_id cannot be empty")
         
         if top_k is None:
             limit = settings.top_k_search
@@ -63,19 +66,30 @@ class HybridRetriever(BaseRetriever):
         # Retrieve more candidates so RRF has a richer set to merge.
         candidate_limit = limit * settings.hybrid_candidate_multiplier
 
+        # Preserve the existing single-document API while passing one canonical
+        # list to both engines. Both filters are combined with the tenant lock
+        # in their respective low-level retrievers.
+        scoped_document_ids = list(document_ids or [])
+        if document_id and document_id not in scoped_document_ids:
+            scoped_document_ids.append(document_id)
+
         async def _dense_search():
             return await self.dense.retrieve(
                 query=query,
+                # Tenant identity must reach every concurrent search branch.
+                user_id=user_id,
                 top_k=candidate_limit,
-                document_ids=document_ids, # BUG 2 FIXED: Pass the list directly
+                document_ids=scoped_document_ids or None,
             )
 
         async def _sparse_search():
             with profile("Sparse Search"):
                 return await self.sparse.retrieve(
                     query=query,
+                    # Tenant identity must reach every concurrent search branch.
+                    user_id=user_id,
                     top_k=candidate_limit,
-                    document_ids=document_ids, # BUG 3 FIXED: Pass the list directly
+                    document_ids=scoped_document_ids or None,
                 )
 
         with profile("Hybrid Retrieval"):

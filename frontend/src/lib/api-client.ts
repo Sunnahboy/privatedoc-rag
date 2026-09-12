@@ -1,4 +1,23 @@
 import { API_BASE_URL } from "./constants";
+import { EventSourcePolyfill } from "event-source-polyfill";
+
+import { createClient } from "@/lib/supabase/client";
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+    const supabase = createClient();
+    const {
+        data: { session },
+        error,
+    } = await supabase.auth.getSession();
+
+    if (error || !session?.access_token) {
+        throw new Error("Unauthorized: No active session found. Please log in through the UI.");
+    }
+
+    return {
+        Authorization: `Bearer ${session.access_token}`,
+    };
+}
 
 export type DocumentStatus = "indexed" | "processing" | "failed";
 
@@ -93,6 +112,7 @@ export const apiClient = {
 
         const response = await fetch(`${API_BASE_URL}/document/upload`, {
             method: "POST",
+            headers: await getAuthHeaders(),
             body: formData,
         });
 
@@ -104,7 +124,9 @@ export const apiClient = {
     },
 
     async getDocument(documentId: string): Promise<DocumentListItem> {
-        const response = await fetch(`${API_BASE_URL}/document/${documentId}`);
+        const response = await fetch(`${API_BASE_URL}/document/${documentId}`, {
+            headers: await getAuthHeaders(),
+        });
         if (!response.ok) {
             throw new Error(`Failed to fetch document status: ${response.status}`);
         }
@@ -148,13 +170,17 @@ export const apiClient = {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    ...(await getAuthHeaders()),
                 },
                 body: JSON.stringify(payload),
                 signal: controller.signal,
             });
 
             if (!response.ok) {
-                throw new Error(`Failed to submit chat job: ${response.status}`);
+                // Extract the backend's exact error message before throwing
+                const errorData = await response.json().catch(() => null);
+                const errorMessage = errorData?.detail || `Failed to submit chat job: ${response.status}`;
+                throw new Error(errorMessage);
             }
 
             return response.json();
@@ -177,6 +203,8 @@ export const apiClient = {
         signal?: AbortSignal,
         onReplayStart?: () => void
     ): Promise<void> {
+        const authHeaders = await getAuthHeaders();
+
         return new Promise<void>((resolve, reject) => {
             if (signal && signal.aborted) {
                 return reject(new DOMException("Aborted", "AbortError"));
@@ -186,7 +214,9 @@ export const apiClient = {
             // history from the start on every (re)connect, so we no longer
             // track/send a fragile last_offset via localStorage.
             const url = `${API_BASE_URL}/rag/stream/${assistantMessageId}`;
-            const eventSource = new EventSource(url);
+            const eventSource = new EventSourcePolyfill(url, {
+                headers: authHeaders,
+            });
 
             if (signal) {
                 signal.addEventListener("abort", () => {
@@ -226,7 +256,9 @@ export const apiClient = {
     },
 
     async listDocuments(): Promise<DocumentListItem[]> {
-        const response = await fetch(`${API_BASE_URL}/document`);
+        const response = await fetch(`${API_BASE_URL}/document`, {
+            headers: await getAuthHeaders(),
+        });
         if (!response.ok) {
             throw new Error(`Failed to fetch documents: ${response.status}`);
         }
@@ -236,6 +268,7 @@ export const apiClient = {
     async deleteDocument(documentId: string): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/document/${documentId}`, {
             method: "DELETE",
+            headers: await getAuthHeaders(),
         });
 
         if (!response.ok) {
@@ -244,7 +277,9 @@ export const apiClient = {
     },
 
     async getChatHistory(sessionId: string): Promise<ChatMessage[]> {
-        const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`);
+        const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`, {
+            headers: await getAuthHeaders(),
+        });
         if (!response.ok) {
             throw new Error(`Failed to fetch chat history: ${response.status}`);
         }
@@ -252,7 +287,9 @@ export const apiClient = {
     },
 
     async listChatSessions(): Promise<ChatSessionSummary[]> {
-        const response = await fetch(`${API_BASE_URL}/chat/sessions`);
+        const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
+            headers: await getAuthHeaders(),
+        });
         if (!response.ok) {
             throw new Error(`Failed to fetch chat sessions: ${response.status}`);
         }
@@ -265,7 +302,10 @@ export const apiClient = {
     ): Promise<ChatSessionSummary> {
         const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                ...(await getAuthHeaders()),
+            },
             body: JSON.stringify({ scope_type: scopeType, document_ids: documentIds }),
         });
 
@@ -280,6 +320,7 @@ export const apiClient = {
         // /chat/sessions/{id} is reserved for per-message truncation.
         const response = await fetch(`${API_BASE_URL}/rag/sessions/${sessionId}`, {
             method: "DELETE",
+            headers: await getAuthHeaders(),
         });
 
         if (!response.ok) {
@@ -293,7 +334,10 @@ export const apiClient = {
     ): Promise<ChatSessionSummary> {
         const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                ...(await getAuthHeaders()),
+            },
             body: JSON.stringify(updates),
         });
 
@@ -306,10 +350,26 @@ export const apiClient = {
     async truncateChatHistory(sessionId: string, messageId: string): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages/${messageId}`, {
             method: "DELETE",
+            headers: await getAuthHeaders(),
         });
 
         if (!response.ok) {
             throw new Error(`Failed to truncate history: ${response.status}`);
         }
+    },
+
+    async getReaderDocument(documentId: string, signal?: AbortSignal): Promise<any> {
+        const response = await fetch(`${API_BASE_URL}/reader/${documentId}`, {
+            headers: await getAuthHeaders(),
+            signal,
+        });
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error("This document could not be found.");
+            }
+            throw new Error("The document is currently unavailable.");
+        }
+        return response.json();
     },
 };

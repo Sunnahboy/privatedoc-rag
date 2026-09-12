@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-
+import { useCallback, useEffect,useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client"; 
 import type { ReaderLoadState } from "../readerTypes";
 
 function formatDocumentError(message?: string | null): string {
@@ -21,6 +21,35 @@ export default function usePDFDocument(totalPages?: number | null) {
   const [loadState, setLoadState] = useState<ReaderLoadState>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // --- Auth State Injection ---
+  const [token, setToken] = useState<string | null>(null);
+  const [isAuthResolved, setIsAuthResolved] = useState(false);
+
+  // Fetch Supabase session before allowing the PDF to load
+  useEffect(() => {
+    let isMounted = true;
+    const supabase = createClient();
+    
+    const fetchToken = async () => {
+      // Temporarily set auth to unresolved if this was triggered by a retry
+      setIsAuthResolved(false); 
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!isMounted) return;
+
+      if (session?.access_token) {
+        setToken(session.access_token);
+      }
+      setIsAuthResolved(true);
+    };
+
+    fetchToken();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [reloadKey]); // Re-fetch the token if handleRetry is called
 
   const resolvedPageCount = useMemo(
     () => numPages ?? totalPages ?? null,
@@ -51,6 +80,8 @@ export default function usePDFDocument(totalPages?: number | null) {
     loadState,
     loadError,
     reloadKey,
+    token,             
+    isAuthResolved,
     setNumPages,
     handleRetry,
     onDocumentLoadSuccess,

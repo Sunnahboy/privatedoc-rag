@@ -2,7 +2,15 @@ import enum
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, DateTime, Enum, Integer, String
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    DateTime,
+    Enum,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -37,8 +45,19 @@ class Document(Base):
     """
 
     __tablename__ = "documents"
+    __table_args__ = (
+        # A content hash is unique only within one tenant. This permits two
+        # users to upload identical files without sharing document ownership.
+        UniqueConstraint(
+            "user_id",
+            "content_hash",
+            name="uq_documents_user_content_hash",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    # Every document belongs to exactly one authenticated tenant.
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
 
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     stored_filename: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -47,7 +66,7 @@ class Document(Base):
 
     # Deduplication & Storage
     content_hash: Mapped[str] = mapped_column(
-        String(64), unique=True, index=True, nullable=False
+        String(64), index=True, nullable=False
     )
 
     storage_provider: Mapped[str] = mapped_column(

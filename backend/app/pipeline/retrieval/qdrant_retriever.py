@@ -1,7 +1,6 @@
 from typing import Self
 
-from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import FieldCondition, Filter, MatchAny
+from qdrant_client import AsyncQdrantClient, models
 
 from app.config import settings
 from app.pipeline.embeddings.base import BaseEmbedder
@@ -51,7 +50,9 @@ class QdrantRetriever(BaseRetriever):
     async def retrieve(
         self,
         query: str,
+        user_id: str,
         top_k: int | None = None,
+        document_id: str | None = None,
         document_ids: list[str] | None = None,
     ) -> RetrievalResult:
         """
@@ -63,21 +64,37 @@ class QdrantRetriever(BaseRetriever):
             raise RetrievalError("top_k must be greater than zero")
         if not query.strip():
             raise RetrievalError("Query cannot be empty")
+        if not user_id or not user_id.strip():
+            raise RetrievalError("user_id cannot be empty")
+
+        # Keep compatibility with the single-document call path while
+        # preserving the existing multi-document filter behavior.
+        scoped_document_ids = list(document_ids or [])
+        if document_id and document_id not in scoped_document_ids:
+            scoped_document_ids.append(document_id)
+
         with profile("Query Embedding"):
             query_vector = await self._embed_query(query)
 
         try:
-            query_filter = None
-
-            if document_ids:
-                query_filter = Filter(
-                    must=[
-                        FieldCondition(
-                            key="document_id",
-                            match=MatchAny(any=document_ids),
-                        )
-                    ]
+            # Tenant lock is unconditional. Qdrant applies every `must`
+            # condition, so an optional document constraint can only narrow a
+            # user's own corpus; it can never widen the tenant boundary.
+            must_conditions: list[models.FieldCondition] = [
+                models.FieldCondition(
+                    key="user_id",
+                    match=models.MatchValue(value=user_id),
                 )
+            ]
+            if scoped_document_ids:
+                must_conditions.append(
+                    models.FieldCondition(
+                        key="document_id",
+                        match=models.MatchAny(any=scoped_document_ids),
+                    )
+                )
+            query_filter = models.Filter(must=must_conditions)
+
             with profile("Qdrant Search"):
                 response = await self.client.query_points(
                     collection_name=self.collection_name,

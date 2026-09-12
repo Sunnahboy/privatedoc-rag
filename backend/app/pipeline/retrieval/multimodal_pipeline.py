@@ -37,6 +37,7 @@ class MultimodalRetrievalPipeline:
         self,
         query: str,
         document_ids: list[str],
+        user_id: str,  
         text_top_k: int = 20,
         visual_top_k: int = 2,
         final_top_k: int = 8,
@@ -45,6 +46,7 @@ class MultimodalRetrievalPipeline:
         raw_results = await self.retriever.retrieve(
             query=query,
             document_ids=document_ids,
+            user_id=user_id,
             limit=max(text_top_k, 10),
         )
 

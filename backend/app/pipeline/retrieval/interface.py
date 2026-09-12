@@ -4,19 +4,23 @@ from .models import RetrievalResult, RetrievedChunk
 
 
 class BaseRetriever(ABC):
-    """Interface for broad search engines (Qdrant, Tantivy)."""
+    """Interface for retrieval backends that must enforce tenant isolation."""
 
     @abstractmethod
     async def retrieve(
         self,
         query: str,
+        user_id: str,
         top_k: int | None = None,
         document_id: str | None = None,
-        limit: int = 5,  
+        document_ids: list[str] | None = None,
         **kwargs,
     ) -> RetrievalResult:
         """
-        Retrieve relevant chunks.
+        Retrieve relevant chunks owned by ``user_id``.
+
+        ``user_id`` is deliberately required rather than optional: a retrieval
+        implementation must never be able to issue an unscoped search.
         """
 
         ...

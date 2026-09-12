@@ -30,13 +30,19 @@ class ChatWorker:
         self.query_router = query_router
 
     async def _get_chat_history(
-        self, session_id: str, current_message_id: str, db: AsyncSession, limit: int = 6
+        self,
+         session_id: str, 
+         current_message_id: str,
+          user_id: str,
+          db: AsyncSession, 
+          limit: int = 6
     ) -> list[ChatMessage]:
         query = text("""
             SELECT role, content 
             FROM chat_messages 
             WHERE session_id = :session_id 
               AND id != :current_message_id
+              AND user_id = :user_id  -- TENANT LOCK: Prevent IDOR on history
               AND status = 'completed'
             ORDER BY created_at DESC 
             LIMIT :limit
@@ -46,6 +52,7 @@ class ChatWorker:
             {
                 "session_id": session_id,
                 "current_message_id": current_message_id,
+                "user_id": user_id,
                 "limit": limit,
             },
         )
@@ -57,6 +64,7 @@ class ChatWorker:
         self,
         message_id: str,
         session_id: str,
+        user_id: str,
         question: str,
         document_ids: list[str],
         db: AsyncSession,
@@ -68,20 +76,25 @@ class ChatWorker:
 
         await db.execute(
             text("UPDATE chat_messages SET status = 'processing' WHERE id = :id"),
-            {"id": message_id},
+            {"id": message_id, "user_id": user_id},
         )
         await db.commit()
 
         try:
             chat_history = await self._get_chat_history(
-                session_id=session_id, current_message_id=message_id, db=db, limit=6
+                session_id=session_id,
+                 current_message_id=message_id,
+                 user_id =user_id,
+                  db=db, 
+                  limit=6
             )
             document_titles = []
             if document_ids:
+                #SECURITY: Prevent leaking other users' document titles
                 doc_query = text(
-                    "SELECT original_filename FROM documents WHERE id = ANY(:doc_ids)"
+                    "SELECT original_filename FROM documents WHERE id = ANY(:doc_ids)  AND user_id = :user_id"
                 )
-                doc_result = await db.execute(doc_query, {"doc_ids": document_ids})
+                doc_result = await db.execute(doc_query, {"doc_ids": document_ids, "user_id": user_id})
                 # Extract the first column from the row tuple
                 document_titles = [row[0] for row in doc_result.fetchall()]
 
@@ -119,6 +132,7 @@ class ChatWorker:
                 document_ids=document_ids,
                 chat_history=chat_history,
                 skip_search=skip_search,
+                user_id=user_id,# PROPAGATE IDENTITY TO RETRIEVAL PIPELINE
             )
 
             # LIVE GENERATION: Write to Valkey RAM buffer
@@ -147,12 +161,14 @@ class ChatWorker:
                     SET content = :content, 
                         citations = :citations,
                         status = 'completed' 
-                    WHERE id = :id
+                    WHERE id = :id AND user_id = :user_id
                 """),
                 {
                     "content": final_answer,
                     "citations": final_citations,
                     "id": message_id,
+                    "user_id": user_id,
+
                 },
             )
             await db.commit()
@@ -166,8 +182,8 @@ class ChatWorker:
             await db.rollback()
 
             await db.execute(
-                text("UPDATE chat_messages SET status = 'failed' WHERE id = :id"),
-                {"id": message_id},
+                text("UPDATE chat_messages SET status = 'failed' WHERE id = :id AND user_id = :user_id"),
+                {"id": message_id,  "user_id": user_id},
             )
             await db.commit()
 

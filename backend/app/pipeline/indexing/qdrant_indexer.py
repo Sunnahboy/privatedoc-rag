@@ -8,7 +8,10 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    KeywordIndexParams,
+    KeywordIndexType,
     MatchValue,
+    PayloadSchemaType,
     PointStruct,
     VectorParams,
 )
@@ -57,19 +60,42 @@ class QdrantIndexer(BaseIndexer):
         self,
         vector_size: int,
     ) -> None:
-        """Create the collection if it does not exist."""
+        """Create the text collection and its required filter indexes.
+
+        The index calls deliberately run for an existing collection too. This
+        makes a deployment converge after the multi-tenant migration instead
+        of only configuring collections created after this code was released.
+        """
         try:
             exists = await self.client.collection_exists(
                 collection_name=self.collection_name,
             )
-            if exists:
-                return
-            await self.client.create_collection(
+            if not exists:
+                await self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=VectorParams(
+                        size=vector_size,
+                        distance=Distance.COSINE,
+                    ),
+                )
+
+            # Qdrant's tenant index co-locates a tenant's vectors for more
+            # efficient disk reads. It does not replace the query-time filter.
+            await self.client.create_payload_index(
                 collection_name=self.collection_name,
-                vectors_config=VectorParams(
-                    size=vector_size,
-                    distance=Distance.COSINE,
+                field_name="user_id",
+                field_schema=KeywordIndexParams(
+                    type=KeywordIndexType.KEYWORD,
+                    is_tenant=True,
                 ),
+                wait=True,
+            )
+            # Keep the existing document-level filter performant as well.
+            await self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="document_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+                wait=True,
             )
         except Exception as exc:
             raise CollectionError(
@@ -85,12 +111,18 @@ class QdrantIndexer(BaseIndexer):
     def _to_point(
         self,
         embedding: EmbeddingResult,
+        user_id: str,
     ) -> PointStruct:
-        qdrant_id = str(uuid.uuid5(uuid.NAMESPACE_OID, str(embedding.chunk_id)))
+        # Include tenant identity in the deterministic point ID so a chunk-id
+        # collision cannot overwrite another tenant's vector.
+        qdrant_id = str(
+            uuid.uuid5(uuid.NAMESPACE_OID, f"{user_id}:{embedding.chunk_id}")
+        )
         return PointStruct(
             id=qdrant_id,
             vector=embedding.vector,
             payload={
+                "user_id": user_id,
                 "original_chunk_id": str(embedding.chunk_id),
                 "document_id": str(embedding.document_id),
                 "chunk_index": embedding.chunk_index,
@@ -123,18 +155,23 @@ class QdrantIndexer(BaseIndexer):
         request: IndexingRequest,
     ) -> IndexingResult:
         embeddings = request.embeddings
+        user_id = request.user_id
+
+        if not user_id:
+            raise UpsertError("Cannot index vectors without a user_id tenant lock.")
 
         if not embeddings:
             return IndexingResult(
                 indexed_count=0,
                 collection_name=self.collection_name,
+                user_id=user_id,
             )
 
         await self.ensure_collection(
             vector_size=embeddings[0].dimensions,
         )
 
-        points = [self._to_point(embedding) for embedding in embeddings]
+        points = [self._to_point(embedding, user_id) for embedding in embeddings]
         batches = self._split_batches(points)
 
         tasks = [self._upsert_batch(batch) for batch in batches]
@@ -145,18 +182,25 @@ class QdrantIndexer(BaseIndexer):
         return IndexingResult(
             indexed_count=len(points),
             collection_name=self.collection_name,
+            user_id=user_id,
         )
 
     async def delete_document(
         self,
         document_id: str,
+        user_id: str,
     ) -> None:
         """Delete all text vectors and visual vectors belonging to a document."""
+        # TENANT LOCK: Only delete if BOTH document_id AND user_id match
         delete_filter = Filter(
             must=[
                 FieldCondition(
                     key="document_id",
                     match=MatchValue(value=document_id),
+                ),
+                FieldCondition(
+                    key="user_id",
+                    match=MatchValue(value=user_id),
                 )
             ]
         )
@@ -171,7 +215,7 @@ class QdrantIndexer(BaseIndexer):
                         wait=True,
                     )
                     logger.info(
-                        f"Successfully deleted document '{document_id}' from '{collection}'."
+                        f"Successfully deleted document '{document_id}' (User: {user_id}) from '{collection}'."
                     )
             except Exception:
                 logger.exception(

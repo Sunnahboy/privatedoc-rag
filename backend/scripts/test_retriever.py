@@ -45,6 +45,7 @@ async def main():
     async with QdrantRetriever() as retriever:
         response = await retriever.retrieve(
             query="Document",
+            user_id="test-user",
             top_k=3,
             document_id="doc2"
         )

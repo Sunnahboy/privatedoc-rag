@@ -39,6 +39,8 @@ dependencies = [
     "sse-starlette>=3.4.8",
     "redis>=8.1.0",
     "fastembed>=0.8.0",
+    "pyjwt>=2.14.0",
+    "cryptography>=50.0.1",
 ]
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
