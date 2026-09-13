@@ -98,7 +98,7 @@ async def get_recent_messages(
     Uses SQLAlchemy 2.0 async select statements.
     """
 
-    # First verify the user owns the session to prevent IDOR leaks
+    # verify the user owns the session to prevent IDOR leaks
     session_stmt = select(ChatSession).filter(
         ChatSession.id == session_id, ChatSession.user_id == current_user_id
     )

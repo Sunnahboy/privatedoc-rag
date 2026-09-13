@@ -8,7 +8,7 @@ from app.config import settings
 # HTTPBearer automatically looks for the "Authorization: Bearer ..." header
 security = HTTPBearer()
 
-# 1. Initialize the JWKS client.
+# Initialize the JWKS client.
 # This fetches Supabase's public keys dynamically so you don't need a hardcoded secret.
 jwks_url = f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
 jwks_client = PyJWKClient(jwks_url)
@@ -23,10 +23,10 @@ async def get_current_user(
     """
     token = credentials.credentials
     try:
-        # 2. Fetch the correct public key for this specific token header
+        # Fetch the correct public key for this specific token header
         signing_key = jwks_client.get_signing_key_from_jwt(token)
 
-        # 3. Decode and verify using the public key and modern algorithms
+        #  Decode and verify using the public key and modern algorithms
         payload = jwt.decode(
             token,
             signing_key.key,
