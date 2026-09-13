@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = "development"
     # Supabase Authentication
-    supabase_url: str
+    supabase_url: str = "[http://dummy.com](http://dummy.com)"
 
     # Upload settings
     upload_dir: str = "../data/uploads"
