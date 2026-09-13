@@ -33,6 +33,7 @@ class DocumentIngestionService:
         try:
             payload = DocumentIngestMessage.model_validate_json(message.body)
             document_id = payload.document_id
+            user_id = payload.user_id
         except Exception as e:  # noqa
             logger.critical("Invalid message payload dropped: %s", e)
             # Reject immediately without requeue so it hits the DLQ, and stop processing.
@@ -44,12 +45,18 @@ class DocumentIngestionService:
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(Document).where(Document.id == document_id)
+                select(Document).where(
+                    Document.id == document_id, Document.user_id == user_id
+                )
             )
             doc = result.scalars().first()
 
             if not doc:
-                logger.error("Document %s not found in DB. Dropping job.", document_id)
+                logger.error(
+                    "Document %s(user: %s) not found in DB. Dropping job.",
+                    document_id,
+                    user_id,
+                )
                 await message.ack()  # removed invalid jobs
                 return
             if doc.status == IngestStatus.COMPLETED:
@@ -71,6 +78,7 @@ class DocumentIngestionService:
                     ingestion_result = await pipeline.ingest(
                         document_id=doc.id,
                         file_path=file_path,
+                        user_id=user_id,
                     )
 
                     doc.status = IngestStatus.COMPLETED
@@ -79,7 +87,11 @@ class DocumentIngestionService:
                     doc.toc = ingestion_result.toc
 
                     await db.commit()
-                    logger.info("Successfully indexed document %s", document_id)
+                    logger.info(
+                        "Successfully indexed document %s for user %s",
+                        document_id,
+                        user_id,
+                    )
                     await message.ack()  # manually ack successful run
                 finally:
                     await pipeline.close()

@@ -8,6 +8,7 @@ async def main():
 
     result = await retriever.retrieve(
         query="software architecture",
+        user_id="test-user",
         top_k=3,
     )
 

@@ -20,6 +20,7 @@ class BaseIndexer(ABC):
     async def delete_document(
         self,
         document_id: str,
+        user_id: str,
     ) -> None:
         """Delete all vectors belonging to a document."""
         ...
@@ -29,7 +30,7 @@ class BaseSparseIndex(ABC):
     """Abstract interface for sparse indexes."""
 
     @abstractmethod
-    async def add_documents(self, chunks) -> None:
+    async def add_documents(self, chunks, user_id: str) -> None:
         """Index document chunks."""
 
     @abstractmethod
@@ -37,7 +38,8 @@ class BaseSparseIndex(ABC):
         self,
         query: str,
         top_k: int,
-        document_id: str | None = None,
+        user_id: str,
+        document_ids: list[str] | None = None,
     ) -> list[RetrievedChunk]:
         """Search indexed documents."""
 
@@ -45,6 +47,7 @@ class BaseSparseIndex(ABC):
     async def delete_document(
         self,
         document_id: str,
+        user_id: str,
     ) -> None:
         """Delete one document from the index."""
 

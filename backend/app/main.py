@@ -1,6 +1,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +16,7 @@ from app.config import settings
 from app.database import engine
 from app.messaging.connection import rabbitmq_manager
 from app.messaging.queues import setup_queues_and_bindings
-from app.qdrant import setup_qdrant_collections
+from app.qdrant import close_qdrant_client, setup_qdrant_collections
 from app.utils.logging_utils import configure_logging
 
 configure_logging()
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Gracefully close connections and drain the pool
     await rabbitmq_manager.close()
+    await close_qdrant_client()
     await engine.dispose()  # dispose of the async engine on shutdown
 
 
@@ -71,6 +73,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 #  exposes your PDF files so the Next.js v
+Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
 app.include_router(health_router)

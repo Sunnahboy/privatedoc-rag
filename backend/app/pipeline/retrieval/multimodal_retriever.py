@@ -31,21 +31,23 @@ class MultimodalRetriever:
         self,
         query: str,
         document_ids: list[str],
-        limit: int = 5,  # BUG 1 FIXED: list[str]
+        user_id: str, 
+        limit: int = 5,  
     ) -> dict[str, list[Any]]:
         """
         Executes parallel searches across both the text and visual collections.
         Filters by the specific document_ids.
         """
         logger.info(
-            f"Executing multimodal retrieval for query: '{query}' across {len(document_ids)} docs"
+            f"Executing multimodal retrieval for query: '{query}' across {len(document_ids)} docs docs | User: {user_id}"
         )
 
         # Hybrid Text Task (Handles dense, sparse, and reranking internally)
         text_task = self.text_retriever.retrieve(
             query=query,
             top_k=limit,
-            document_ids=document_ids,  # BUG 2 FIXED: pass list
+            document_ids=document_ids,  
+            user_id=user_id,
         )
 
         # 2. Visual Task (Handles ColQwen2 encoding and Qdrant nearest-neighbor search)
@@ -54,10 +56,14 @@ class MultimodalRetriever:
             doc_filter = models.Filter(
                 must=[
                     models.FieldCondition(
+                        key="user_id",
+                        match=models.MatchValue(value=user_id),  # TENANT LOCK
+                    ),
+                    models.FieldCondition(
                         key="document_id",
                         match=models.MatchAny(
                             any=document_ids
-                        ),  # BUG 3 FIXED: MatchAny
+                        ),  
                     )
                 ]
             )
@@ -92,7 +98,7 @@ class MultimodalRetriever:
                 "reasons": hit.payload.get("reasons", []) if hit.payload else [],
                 "document_id": hit.payload.get("document_id")
                 if hit.payload
-                else None,  # BUG 4 FIXED: Required for PDF extraction
+                else None,  
             }
             for hit in (visual_results or [])
         ]

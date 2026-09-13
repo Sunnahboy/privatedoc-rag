@@ -83,19 +83,35 @@ class VisualWorker:
             await message.reject(requeue=False)
             return
 
+        if not payload.user_id.strip():
+            # A queue message without a tenant must never be allowed to turn a
+            # guessed document ID into a visual-processing job.
+            logger.critical(
+                "Visual job without user_id dropped for document %s",
+                payload.document_id,
+            )
+            await message.reject(requeue=False)
+            return
+
         logger.info(
             f"Processing Visual Page | Doc: {payload.document_id} | "
             f"Page: {payload.page_number} | Trigger: {payload.classification}"
         )
 
         async with AsyncSessionLocal() as db:
+            # TENANT LOCK: A document ID is not authority. The job must name
+            # the same owner as the persisted document before any file is read.
             result = await db.execute(
-                select(Document).where(Document.id == payload.document_id)
+                select(Document).where(
+                    Document.id == payload.document_id,
+                    Document.user_id == payload.user_id,
+                )
             )
             doc = result.scalars().first()
             if not doc or not doc.stored_filename:
                 logger.error(
-                    f"Document {payload.document_id} not found in DB. Dropping job."
+                    "Document %s was not found for its tenant. Dropping visual job.",
+                    payload.document_id,
                 )
                 await message.reject(requeue=False)
                 return
@@ -117,19 +133,27 @@ class VisualWorker:
             # Generate Late-Interaction Multi-Vectors via HTTP Bridge
             multi_vector = await self.visual_engine.embed_image(image)
 
-            point_string_id = f"{payload.document_id}_page_{payload.page_number}"
+            point_string_id = (
+                f"{payload.user_id}:{payload.document_id}:page:{payload.page_number}"
+            )
 
-            # Deterministic UUID prevents Qdrant duplicate vectors if the job is rerun
+            # Deterministic per-tenant UUID prevents retry duplicates and a
+            # cross-tenant ID collision from overwriting another visual point.
             deterministic_uuid = str(uuid.uuid5(QDRANT_NAMESPACE, point_string_id))
 
             await self.qdrant_client.upsert(
-                collection_name="documents_visual",
+                collection_name=getattr(
+                    settings, "qdrant_visual_collection_name", "documents_visual"
+                ),
                 points=[
                     models.PointStruct(
                         id=deterministic_uuid,
                         vector=multi_vector.tolist(),
                         payload={
                             "chunk_id": point_string_id,
+                            # Required by MultimodalRetriever's mandatory
+                            # Qdrant user_id filter.
+                            "user_id": payload.user_id,
                             "document_id": payload.document_id,
                             "page_number": payload.page_number,
                             "classification": payload.classification,
@@ -154,7 +178,10 @@ class VisualWorker:
         logger.info("Starting Visual Representation Worker...")
 
         # Initialize clients natively within the class instance
-        self.qdrant_client = AsyncQdrantClient(url=settings.qdrant_url)
+        self.qdrant_client = AsyncQdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key,
+        )
 
         logger.info("Initializing connection to Centralized Visual API...")
         self.visual_engine = VisualAPIClient()

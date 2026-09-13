@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     app_name: str = "PrivateDoc RAG"
     app_version: str = "0.1.0"
     environment: str = "development"
+    # Supabase Authentication
+    supabase_url: str
 
     # Upload settings
     upload_dir: str = "../data/uploads"

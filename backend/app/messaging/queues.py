@@ -8,7 +8,7 @@ from .exchanges import declare_exchanges
 async def setup_queues_and_bindings(
     channel: AbstractRobustChannel,
 ) -> dict[str, AbstractQueue]:
-    """Sets up queues, dead-letters and binding keys."""
+    """Sets up queues, domain-specific dead-letters and binding keys."""
 
     exchanges = await declare_exchanges(channel)
 
@@ -20,7 +20,7 @@ async def setup_queues_and_bindings(
     )
 
     # Declare the main processing queue with DLX arguments.
-    queue_args = {
+    ingestion_queue_args = {
         "x-dead-letter-exchange": settings.DLX_EXCHANGE_NAME,
         "x-dead-letter-routing-key": settings.DLQ_ROUTING_KEY,
     }
@@ -28,22 +28,28 @@ async def setup_queues_and_bindings(
     main_queue = await channel.declare_queue(
         name=settings.INGESTION_QUEUE_NAME,
         durable=True,
-        arguments=queue_args,
+        arguments=ingestion_queue_args,
     )
+    await main_queue.bind(
+        exchange=exchanges["doc_exchange"], 
+        routing_key=settings.INGESTION_ROUTING_KEY
+    )
+
+    # 3. Chat Generation Queue Configuration
+    chat_queue_args = {
+        "x-dead-letter-exchange": settings.DLX_EXCHANGE_NAME,
+        "x-dead-letter-routing-key": settings.DLQ_ROUTING_KEY,
+    }
 
     #chat generation queue
     chat_queue = await channel.declare_queue(
         name=settings.CHAT_QUEUE_NAME, 
         durable=True,
-        arguments=queue_args, 
+        arguments=chat_queue_args, 
     )
     await chat_queue.bind(
-        exchange=exchanges["chat_exchange"], routing_key=settings.CHAT_ROUTING_KEY
-    )
-
-    await main_queue.bind(
-        exchange=exchanges["doc_exchange"], 
-        routing_key=settings.INGESTION_ROUTING_KEY
+        exchange=exchanges["chat_exchange"],
+         routing_key=settings.CHAT_ROUTING_KEY
     )
 
     return {

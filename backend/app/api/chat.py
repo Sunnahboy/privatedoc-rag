@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_current_user
 from app.database import get_db
 from app.models.chat import ChatMessage, ChatSession
 from app.schemas.chat_schema import (
@@ -18,12 +19,14 @@ router = APIRouter(prefix="/chat", tags=["Chat History"])
 
 # The linter ignores
 DatabaseDep = Annotated[AsyncSession, Depends(get_db)]
+UserDep = Annotated[str, Depends(get_current_user)]
 
 
 @router.post("/sessions", response_model=ChatSessionResponse)
 async def create_session(
     request: CreateSessionRequest,
     db: DatabaseDep,
+    current_user_id: UserDep,
 ):
     """Creates a new isolated chat session (Asynchronous)."""
     session_id = str(uuid.uuid4())
@@ -32,6 +35,7 @@ async def create_session(
         title="New Chat",
         scope_type=request.scope_type,
         document_ids=request.document_ids,
+        user_id=current_user_id,
     )
 
     db.add(new_session)
@@ -42,10 +46,12 @@ async def create_session(
 
 
 @router.get("/sessions", response_model=list[ChatSessionResponse])
-async def get_all_sessions(db: DatabaseDep):
+async def get_all_sessions(db: DatabaseDep, current_user_id: UserDep):
     """Returns all chat sessions for the Chat Focus sidebar, pinned first."""
-    stmt = select(ChatSession).order_by(
-        desc(ChatSession.is_pinned), desc(ChatSession.created_at)
+    stmt = (
+        select(ChatSession)
+        .filter(ChatSession.user_id == current_user_id)
+        .order_by(desc(ChatSession.is_pinned), desc(ChatSession.created_at))
     )
     result = await db.execute(stmt)
     return result.scalars().all()
@@ -56,9 +62,14 @@ async def update_session(
     session_id: str,
     request: UpdateSessionRequest,
     db: DatabaseDep,
+    current_user_id: UserDep,
 ):
     """Renames a session and/or toggles its pinned state."""
-    session = await db.get(ChatSession, session_id)
+    stmt = select(ChatSession).filter(
+        ChatSession.id == session_id, ChatSession.user_id == current_user_id
+    )
+    result = await db.execute(stmt)
+    session = result.scalars().first()
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
@@ -79,19 +90,23 @@ async def update_session(
 async def get_recent_messages(
     session_id: str,
     db: DatabaseDep,
+    current_user_id: UserDep,
     limit: int = 100,
 ):
     """
     SLIDING WINDOW: Only fetches the 'limit' most recent messages.
     Uses SQLAlchemy 2.0 async select statements.
     """
-    # Build the query
-    # BUG FIX: user/assistant pairs share the same `created_at` timestamp
-    # (inserted in the same commit), so `created_at` alone is not a stable
-    # sort key - ties can be returned in either order. `seq` is a DB-assigned
-    # autoincrementing column that always reflects true insertion order, so
-    # it's used as the primary sort key to guarantee the assistant reply is
-    # never ordered before its own user question.
+
+    # First verify the user owns the session to prevent IDOR leaks
+    session_stmt = select(ChatSession).filter(
+        ChatSession.id == session_id, ChatSession.user_id == current_user_id
+    )
+    session_result = await db.execute(session_stmt)
+    if not session_result.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
 
     stmt = (
         select(ChatMessage)
@@ -111,10 +126,23 @@ async def get_recent_messages(
 
 
 @router.delete("/sessions/{session_id}/messages/{message_id}")
-async def truncate_chat_history(session_id: str, message_id: str, db: DatabaseDep):
+async def truncate_chat_history(
+    session_id: str,
+    message_id: str,
+    db: DatabaseDep,
+    current_user_id: UserDep,
+):
     """Deletes a specific message and all subsequent messages to handle inline edits."""
 
-    # Find the exact message the user is editing to get its timestamp
+    # Verify session ownership before allowing destructive actions
+    session_stmt = select(ChatSession).filter(
+        ChatSession.id == session_id, ChatSession.user_id == current_user_id
+    )
+    session_result = await db.execute(session_stmt)
+    if not session_result.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
     stmt = select(ChatMessage).filter(
         ChatMessage.session_id == session_id, ChatMessage.id == message_id
     )

@@ -68,3 +68,5 @@ class DocumentVisualJobMessage(BaseModel):
     classification: PageClassification
     reasons: list[str]
     signals: dict[str, Any]
+    # Reject empty tenant identities at the RabbitMQ message boundary.
+    user_id: str = Field(min_length=1)

@@ -4,7 +4,6 @@ Generates late-interaction multi-vector embeddings for document pages.
 """
 
 import logging
-import os
 from threading import Lock
 from typing import Any
 
@@ -13,7 +12,6 @@ import torch
 
 # Import the ColPali architecture and processor
 from colpali_engine.models import ColQwen2, ColQwen2Processor
-from huggingface_hub import snapshot_download
 from PIL import Image
 from transformers import BitsAndBytesConfig
 
@@ -21,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 from pathlib import Path
+
 
 class VisualRetrieverEngine:
     _model_instance: Any = None
@@ -47,7 +46,9 @@ class VisualRetrieverEngine:
                     logger.info("Initializing Visual Engine on MPS (Apple Silicon).")
                 else:
                     device = torch.device("cpu")
-                    logger.warning("No GPU found. Initializing Visual Engine on CPU (Very Slow!).")
+                    logger.warning(
+                        "No GPU found. Initializing Visual Engine on CPU (Very Slow!)."
+                    )
 
                 cls._device = device
 
@@ -57,8 +58,7 @@ class VisualRetrieverEngine:
                 # It will automatically download if missing, and instantly load if present.
                 logger.info(f"Loading processor for {cls.HUB_MODEL_NAME}...")
                 cls._processor_instance = ColQwen2Processor.from_pretrained(
-                    cls.HUB_MODEL_NAME,
-                    cache_dir=cls.CACHE_DIR
+                    cls.HUB_MODEL_NAME, cache_dir=cls.CACHE_DIR
                 )
 
                 logger.info(f"Loading model weights for {cls.HUB_MODEL_NAME}...")
@@ -71,10 +71,10 @@ class VisualRetrieverEngine:
                         llm_int8_enable_fp32_cpu_offload=True,
                     )
                     cls._model_instance = ColQwen2.from_pretrained(
-                        cls.HUB_MODEL_NAME, # Use the string "vidore/colqwen2-v1.0"
+                        cls.HUB_MODEL_NAME,  # Use the string "vidore/colqwen2-v1.0"
                         quantization_config=quantization_config,
                         device_map={"": "cuda"},
-                        cache_dir=cls.CACHE_DIR, # Let HF manage the folder
+                        cache_dir=cls.CACHE_DIR,  # Let HF manage the folder
                         # local_files_only=True is REMOVED so it can self-heal missing files
                     ).eval()
                     logger.info("Model loaded in 4-bit quantized mode.")

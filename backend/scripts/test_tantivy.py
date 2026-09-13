@@ -35,11 +35,12 @@ async def main():
         ),
     ]
 
-    await index.add_documents(chunks)
+    await index.add_documents(chunks, user_id="test-user")
 
     results = await index.search(
         "software architecture",
         top_k=3,
+        user_id="test-user",
     )
 
     print("=" * 60)

@@ -10,13 +10,14 @@ from .messages import ChatGenerationMessage, DocumentIngestMessage
 logger = logging.getLogger(__name__)
 
 
-async def publish_ingestion_job(document_id: str, storage_key: str) -> None:
+async def publish_ingestion_job(document_id: str, storage_key: str,user_id:str) -> None:
     """Publishes a persistent document ingestion job using a pooled channel."""
     pool = rabbitmq_manager.get_channel_pool()
 
     payload = DocumentIngestMessage(
         document_id=document_id,
         storage_key=storage_key,
+        user_id =user_id,
     )
 
     message = aio_pika.Message(
@@ -37,7 +38,11 @@ async def publish_ingestion_job(document_id: str, storage_key: str) -> None:
 
 
 async def publish_chat_job(
-    message_id: str, session_id: str, question: str, document_ids: list[str] | None
+    message_id: str, 
+    session_id: str,
+    question: str, 
+    document_ids: list[str] | None,
+    user_id:str,
 ) -> None:
     """Publishe a persitent chat message using a pooled channel"""
     pool = rabbitmq_manager.get_channel_pool()
@@ -46,6 +51,7 @@ async def publish_chat_job(
     payload = ChatGenerationMessage(
         message_id=message_id,
         session_id=session_id,
+        user_id =user_id,
         question=question,
         document_ids=document_ids or [],
     )
@@ -69,4 +75,4 @@ async def publish_chat_job(
         )
         await exchange.publish(message, routing_key=settings.CHAT_ROUTING_KEY)
 
-    logger.info("Published chat generation job for message: %s", message_id)
+    logger.info("Published chat generation job for message: %s | %s", message_id, user_id)

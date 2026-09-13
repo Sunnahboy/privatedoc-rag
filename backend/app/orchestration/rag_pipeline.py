@@ -46,6 +46,7 @@ class RAGPipeline(BaseRAGPipeline):
     async def ask(
         self,
         question: str,
+        user_id: str,
         document_id: str | None = None,
         chat_history: list[ChatMessage] | None = None,
         skip_search: bool = False,
@@ -62,6 +63,7 @@ class RAGPipeline(BaseRAGPipeline):
                 multimodal_result = await self.multimodal_pipeline.search(
                     query=question,
                     document_id=document_id,
+                    user_id=user_id,
                 )
                 dense_count = multimodal_result.dense_hits
                 sparse_count = multimodal_result.sparse_hits
@@ -102,6 +104,7 @@ class RAGPipeline(BaseRAGPipeline):
                 retrieved = await self.retriever.retrieve(
                     query=question,
                     document_id=document_id,
+                     user_id=user_id,
                 )
                 dense_count = retrieved.dense_hits
                 sparse_count = retrieved.sparse_hits
@@ -138,6 +141,7 @@ class RAGPipeline(BaseRAGPipeline):
         self,
         question: str,
         document_ids: list[str],
+        user_id:str,
         chat_history: list[ChatMessage] | None = None,
         skip_search: bool = False,
     ) -> AsyncGenerator[dict, None]:
@@ -164,6 +168,7 @@ class RAGPipeline(BaseRAGPipeline):
                         document_ids=document_ids,
                         text_top_k=dynamic_top_k,
                         final_top_k=8,
+                        user_id=user_id,
                     )
                     dense_count = multimodal_result.dense_hits
                     sparse_count = multimodal_result.sparse_hits
@@ -211,6 +216,7 @@ class RAGPipeline(BaseRAGPipeline):
                     retrieved = await self.retriever.retrieve(
                         query=question,
                         document_id=document_ids[0] if document_ids else None,
+                        user_id=user_id,
                     )
                     dense_count = retrieved.dense_hits
                     sparse_count = retrieved.sparse_hits

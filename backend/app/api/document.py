@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_current_user
 from app.database import get_db
 from app.schemas.document_schema import (
     DocumentDeleteResponse,
@@ -33,7 +34,9 @@ router = APIRouter(prefix="/document", tags=["Documents"])
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def upload_document(
-    file: Annotated[UploadFile, File(...)], db: Annotated[AsyncSession, Depends(get_db)]
+    file: Annotated[UploadFile, File(...)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user_id: Annotated[str, Depends(get_current_user)],
 ) -> DocumentUploadResponse:
     """
     Upload a document and return its metadata.
@@ -44,11 +47,12 @@ async def upload_document(
     """
 
     try:
-        result = await save_uploaded_document(file=file, db=db)
+        result = await save_uploaded_document(file=file, db=db, user_id=current_user_id)
 
         logger.info(
-            "Uploaded document_id=%s filename=%s size=%s bytes",
+            "Uploaded document_id=%s  user_id=%s filename=%s size=%s bytes",
             result.document_id,
+            current_user_id,
             result.filename,
             result.file_size_bytes,
         )
@@ -59,7 +63,7 @@ async def upload_document(
     except DuplicateDocumentError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"A document with this exact content already exists. Existing ID: {e.existing_document_id}",
+            detail=f"A document with this exact content already exists . Existing ID: {e.existing_document_id}",
         )
     except Exception as exc:
         logger.exception(
@@ -79,13 +83,14 @@ async def upload_document(
 )
 async def list_documents_endpoint(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user_id: Annotated[str, Depends(get_current_user)],
 ) -> list[DocumentListItem]:
     """
     Return all uploaded documents. Defined before the detail route so FastAPI
     doesn't treat the empty path as a document_id.
     """
     try:
-        return await list_documents(db=db)
+        return await list_documents(db=db, user_id=current_user_id)
     except HTTPException:
         raise
     except Exception as exc:
@@ -106,13 +111,16 @@ async def list_documents_endpoint(
 async def get_document(
     document_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user_id: Annotated[str, Depends(get_current_user)],
 ) -> DocumentListItem:
     """
     Fetch a single document by ID. The service returns a DocumentListItem
     schema (or None) so this router simply forwards that result or raises 404.
     """
     try:
-        doc = await get_document_by_id(document_id=document_id, db=db)
+        doc = await get_document_by_id(
+            document_id=document_id, db=db, user_id=current_user_id
+        )
         if not doc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -122,9 +130,7 @@ async def get_document(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception(
-            "Unexpected error fetching document_id: %s",
-        )
+        logger.exception("Unexpected error fetching document_id: %s", document_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unexpected error while fetching document.",
@@ -137,7 +143,9 @@ async def get_document(
     status_code=status.HTTP_200_OK,
 )
 async def delete_document(
-    document_id: str, db: Annotated[AsyncSession, Depends(get_db)]
+    document_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user_id: Annotated[str, Depends(get_current_user)],
 ) -> DocumentDeleteResponse:
     """
     Delete an uploaded document.
@@ -154,13 +162,19 @@ async def delete_document(
     """
 
     try:
-        result = await delete_document_by_id(document_id=document_id, db=db)
-        logger.info("Deleted document_id=%s", result.document_id)
+        result = await delete_document_by_id(
+            document_id=document_id, db=db, user_id=current_user_id
+        )
+        logger.info(
+            "Deleted document_id=%s  by user_id=%s", result.document_id, current_user_id
+        )
         return result
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("Unexpected document delete failure for document_id: %s")
+        logger.exception(
+            "Unexpected document delete failure for document_id: %s", document_id
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unexpected error while deleting document.",
@@ -175,6 +189,7 @@ async def delete_document(
 async def get_document_file(
     document_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user_id: Annotated[str, Depends(get_current_user)],
 ) -> FileResponse:
     """
     Stream the raw document file directly to the client.
@@ -182,7 +197,9 @@ async def get_document_file(
     """
     try:
         # Look up the document metadata
-        doc = await get_document_by_id(document_id=document_id, db=db)
+        doc = await get_document_by_id(
+            document_id=document_id, db=db, user_id=current_user_id
+        )
         if not doc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

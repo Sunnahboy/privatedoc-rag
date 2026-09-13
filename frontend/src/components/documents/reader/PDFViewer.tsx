@@ -105,6 +105,8 @@ export default function PDFViewer({
     loadState,
     loadError,
     reloadKey,
+     token,             
+    isAuthResolved,    
     handleRetry,
     onDocumentLoadSuccess,
     onDocumentLoadError,
@@ -280,6 +282,19 @@ export default function PDFViewer({
     ? pageTurnState
     : null;
 
+  const documentOptionsRef = useRef<{ httpHeaders?: Record<string, string> }>({
+    httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (
+    (token && documentOptionsRef.current.httpHeaders?.Authorization !== `Bearer ${token}`) ||
+    (!token && documentOptionsRef.current.httpHeaders !== undefined)
+  ) {
+    documentOptionsRef.current = {
+      httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
+    };
+  }
+  const documentOptions = documentOptionsRef.current;
+
   return (
     <section className={`pdf-viewer-shell relative flex h-full min-h-0 flex-col ${VIEWPORT_BACKGROUND} text-on-surface`} aria-label="Document reader">
       {readingMode !== "focus" && (
@@ -361,9 +376,22 @@ export default function PDFViewer({
           tabIndex={0}
           aria-label="Reader viewport"
         >
+          {/* --- Senior Fix: The Auth Shield --- */}
+          {!isAuthResolved ? (
+            <div className="flex min-h-[60vh] items-center justify-center">
+              <div className="max-w-sm text-center">
+                <p className="text-base font-medium text-on-surface">Authenticating…</p>
+                <p className="mt-2 text-sm text-on-surface-variant">
+                  Verifying secure access to this document.
+                </p>
+              </div>
+            </div>
+          ) : (
           <Document
             key={`${fileUrl}-${reloadKey}`}
             file={fileUrl}
+            // --- Senior Fix: Token Injection ---
+            options={documentOptions}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
             loading={
@@ -463,7 +491,7 @@ export default function PDFViewer({
               />
             ) : null}
           </Document>
-
+           )}
           {sequentialTurningEnabled && loadState !== "error" && (
             <>
               <button

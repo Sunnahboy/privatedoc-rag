@@ -11,7 +11,7 @@ import { useDocuments } from "@/hooks/useDocuments";
 import { normalizeDocumentStatus } from "@/lib/api-client";
 import { API_BASE_URL } from "@/lib/constants";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
-
+import { LogoutButton } from "@/components/auth/LogoutButton";
 type ViewMode = "grid" | "list";
 type StatusFilter = "all" | "indexed" | "processing" | "failed";
 type ScopeFilter = "all" | "recent" | "starred" | "collections";
@@ -119,6 +119,7 @@ export default function LibraryPage() {
                 refresh
               </span>
             </button>
+            <LogoutButton />
           </div>
         </div>
       </header>

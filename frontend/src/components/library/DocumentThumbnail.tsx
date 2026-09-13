@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
+import { createClient } from "@/lib/supabase/client";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -35,11 +36,31 @@ export function DocumentThumbnail({
   const [numPages, setNumPages] = useState<number | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
-
+  // --- Auth State ---
+  const [token, setToken] = useState<string | null>(null);
+  const [isAuthResolved, setIsAuthResolved] = useState(false);
   const isPdf = useMemo(
     () => originalFilename.toLowerCase().endsWith(".pdf"),
     [originalFilename],
   );
+
+  // --- Auth Fetching ---
+  useEffect(() => {
+    // Optimization: Don't fetch the token if this isn't even a PDF
+    if (!isPdf) return;
+
+    const supabase = createClient();
+    const fetchToken = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        setToken(session.access_token);
+      }
+      setIsAuthResolved(true);
+    };
+    
+    fetchToken();
+  }, [isPdf]);
+
 
   useEffect(() => {
     const host = hostRef.current;
@@ -84,6 +105,19 @@ export function DocumentThumbnail({
   const showBackPreview = canShowBackPreview && (isHovered || forceBackPreview);
   const shouldRenderBackPreview = canShowBackPreview && (hasInteracted || forceBackPreview);
 
+  const documentOptionsRef = useRef<{ httpHeaders?: Record<string, string> }>({
+    httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (
+    (token && documentOptionsRef.current.httpHeaders?.Authorization !== `Bearer ${token}`) ||
+    (!token && documentOptionsRef.current.httpHeaders !== undefined)
+  ) {
+    documentOptionsRef.current = {
+      httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
+    };
+  }
+  const documentOptions = documentOptionsRef.current;
+
   if (!isPdf) {
     return (
       <div
@@ -109,11 +143,13 @@ export function DocumentThumbnail({
       }}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {!isVisible ? (
+      {!isVisible  || !isAuthResolved ?  (
         <div className="text-xs text-on-surface-variant">Loading preview…</div>
       ) : (
         <Document
           file={fileUrl}
+          
+          options={documentOptions}
           onLoadSuccess={(result) => {
             setNumPages(Number.isFinite(result.numPages) && result.numPages > 0 ? result.numPages : 0);
           }}

@@ -12,6 +12,11 @@ from app.utils.logging_utils import logging
 from .interface import BaseSparseIndex
 
 
+def _escape_query_literal(value: str) -> str:
+    """Escape a value embedded in a quoted Tantivy query literal."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 class TantivyIndexer(BaseSparseIndex):
     def __init__(
         self,
@@ -22,6 +27,12 @@ class TantivyIndexer(BaseSparseIndex):
         self.index = None
 
         builder = SchemaBuilder()
+        # Tenant IDs are indexed as exact raw tokens, never analyzed text.
+        self.user_id = builder.add_text_field(
+            "user_id",
+            stored=True,
+            tokenizer_name="raw",
+        )
 
         self.document_id = builder.add_text_field(
             "document_id",
@@ -52,6 +63,23 @@ class TantivyIndexer(BaseSparseIndex):
             )
 
         self.searcher = self.index.searcher()
+        self._assert_tenant_schema()
+
+    def _assert_tenant_schema(self) -> None:
+        """Refuse an old sparse index that has no tenant field.
+
+        Tantivy schemas are immutable. Silently opening an index produced by
+        the single-tenant schema would make the mandatory tenant query invalid
+        (or tempt a caller to issue an unscoped fallback). Operators must
+        rebuild that index from tenant-stamped source documents instead.
+        """
+        try:
+            self.index.parse_query_lenient('user_id:"schema-check"', ["user_id"])
+        except ValueError as exc:
+            raise RuntimeError(
+                "The Tantivy index lacks the required user_id field. "
+                "Rebuild it from tenant-stamped documents before serving search."
+            ) from exc
 
     @retry(
         stop=stop_after_attempt(5),
@@ -61,14 +89,16 @@ class TantivyIndexer(BaseSparseIndex):
     async def add_documents(
         self,
         chunks: list[Chunk],
+        user_id: str,
     ) -> None:
-        """converts  domain model (Chunk) into Tantivy documents.
-        - writes them to the index,
-        - After commit(), the documents become searchable,
-        - A new Searcher  queries  latest index."""
+        """Index chunks with their tenant ownership stamp."""
+        if not user_id or not user_id.strip():
+            raise ValueError("user_id cannot be empty")
+
         writer = self.index.writer()
         for chunk in chunks:
             doc = Document()
+            doc.add_text("user_id", user_id)
             doc.add_text("document_id", chunk.document_id)
             doc.add_text("chunk_id", chunk.chunk_id)
             doc.add_integer("chunk_index", chunk.chunk_index)
@@ -85,33 +115,44 @@ class TantivyIndexer(BaseSparseIndex):
         self,
         query: str,
         top_k: int,
-        document_ids: list[str] | None = None,  # THE FIX: Accept list
+        user_id: str,
+        document_ids: list[str] | None = None,
     ) -> list[RetrievedChunk]:
         # Reload so this searcher sees segments committed by any other instance.
         self.index.reload()
         self.searcher = self.index.searcher()
 
-        # Remove Lucene special characters that break Tantivy's parser
-        safe_query = re.sub(r'[\+\-\&&\|!(){}[\]^"~*?:\\/]', " ", query).strip()
-        # Fallback to alphanumeric words if empty
-        if not safe_query:
-            safe_query = query
+        if not user_id or not user_id.strip():
+            raise ValueError("user_id cannot be empty")
 
-        # THE FIX: Construct a valid Boolean OR clause for multiple documents
+        # Remove parser operators so only the structural clauses below decide
+        # filtering. If no searchable terms remain, return no match rather
+        # than parsing a user-controlled expression.
+        safe_query = re.sub(r'[\+\-\&&\|!(){}[\]^"~*?:\\/]', " ", query).strip()
+        if not safe_query:
+            return []
+
+        # SECURITY: Every sparse query carries an exact tenant clause. This
+        # clause is programmatically constructed and ANDed with any optional
+        # document selection and with the sanitized text query.
+        tenant_clause = f'user_id:"{_escape_query_literal(user_id)}"'
         if document_ids:
-            # Creates: document_id:"doc_1" OR document_id:"doc_2"
+            # Creates: document_id:"doc_1" OR document_id:"doc_2".
+            # IDs are escaped because this is the final query string boundary.
             doc_or_clause = " OR ".join(
-                f'document_id:"{doc_id}"' for doc_id in document_ids
+                f'document_id:"{_escape_query_literal(doc_id)}"'
+                for doc_id in document_ids
             )
 
-            # BUG FIX: Use safe_query here, NOT the raw query!
-            final_query = f"({doc_or_clause}) AND ({safe_query})"
+            final_query = f"({tenant_clause}) AND ({doc_or_clause}) AND ({safe_query})"
         else:
-            final_query = safe_query
+            final_query = f"({tenant_clause}) AND ({safe_query})"
 
         query_parser, errors = self.index.parse_query_lenient(
             final_query,
-            ["document_id", "text"],
+            # Unqualified user text can search text only; tenant and document
+            # fields are available solely through the generated clauses above.
+            ["text"],
         )
 
         if errors:
@@ -146,8 +187,13 @@ class TantivyIndexer(BaseSparseIndex):
     async def delete_document(
         self,
         document_id: str,
+        user_id: str,
     ) -> None:
-        # acquire the lock when deleting as well
+        """Delete a document after the caller has verified ownership in SQL.
+
+        tantivy-py deletes by one term here, so the database ownership check
+        remains the authorization boundary for deletion.
+        """
         writer = self.index.writer()
         writer.delete_documents(
             "document_id",

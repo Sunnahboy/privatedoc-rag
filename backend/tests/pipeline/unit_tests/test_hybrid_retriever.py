@@ -7,6 +7,8 @@ from app.pipeline.retrieval.exceptions import RetrievalError, SearchError
 from app.pipeline.retrieval.hybrid_retriever import HybridRetriever
 from app.pipeline.retrieval.models import RetrievalResult, RetrievedChunk
 
+USER_ID = "user-a"
+
 
 def chunk(chunk_id: str) -> RetrievedChunk:
     return RetrievedChunk(
@@ -67,6 +69,7 @@ async def test_successful_hybrid_retrieval(
 
     result = await hybrid.retrieve(
         query="software architecture",
+        user_id=USER_ID,
         top_k=3,
     )
 
@@ -81,7 +84,7 @@ async def test_successful_hybrid_retrieval(
 @pytest.mark.asyncio
 async def test_empty_query_raises(hybrid):
     with pytest.raises(RetrievalError):
-        await hybrid.retrieve("")
+        await hybrid.retrieve("", user_id=USER_ID)
 
 
 @pytest.mark.asyncio
@@ -93,6 +96,7 @@ async def test_invalid_top_k_raises(
     with pytest.raises(RetrievalError):
         await hybrid.retrieve(
             "query",
+            user_id=USER_ID,
             top_k=top_k,
         )
 
@@ -111,7 +115,7 @@ async def test_dense_failure_propagates(
     )
 
     with pytest.raises(SearchError):
-        await hybrid.retrieve("query")
+        await hybrid.retrieve("query", user_id=USER_ID)
 
 
 @pytest.mark.asyncio
@@ -128,7 +132,7 @@ async def test_sparse_failure_propagates(
     sparse.retrieve.side_effect = SearchError("Sparse retrieval failed.")
 
     with pytest.raises(SearchError):
-        await hybrid.retrieve("query")
+        await hybrid.retrieve("query", user_id=USER_ID)
 
 
 @pytest.mark.asyncio
@@ -150,7 +154,7 @@ async def test_both_empty(
 
     fusion.fuse.return_value = []
 
-    result = await hybrid.retrieve("query")
+    result = await hybrid.retrieve("query", user_id=USER_ID)
 
     assert not result.found
     assert result.chunks == []
@@ -177,6 +181,7 @@ async def test_top_k_limiting(
 
     result = await hybrid.retrieve(
         "query",
+        user_id=USER_ID,
         top_k=5,
     )
 
@@ -204,17 +209,20 @@ async def test_document_id_propagated(
 
     await hybrid.retrieve(
         query="fault tolerance",
+        user_id=USER_ID,
         document_ids=["doc123"],
     )
     expected_top_k = settings.top_k_search * settings.hybrid_candidate_multiplier
     dense.retrieve.assert_awaited_once_with(
         query="fault tolerance",
+        user_id=USER_ID,
         top_k=expected_top_k,
         document_ids=["doc123"],
     )
 
     sparse.retrieve.assert_awaited_once_with(
         query="fault tolerance",
+        user_id=USER_ID,
         top_k=expected_top_k,
         document_ids=["doc123"],
     )

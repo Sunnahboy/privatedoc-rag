@@ -47,6 +47,7 @@ class ChatGenerationService:
         """RabbitMQ Callback."""
         try:
             payload = ChatGenerationMessage.model_validate_json(message.body)
+            user_id = payload.user_id
         except Exception as e:  # noqa
             logger.critical("Invalid chat message payload dropped: %s", e)
             await message.reject(requeue=False)
@@ -63,10 +64,11 @@ class ChatGenerationService:
             )
 
             try:
-                logger.info(f"Processing chat job for message {payload.message_id}")
+                logger.info(f"Processing chat job for message {payload.message_id} | User: {user_id}")
                 await worker.process_chat_job(
                     message_id=payload.message_id,
                     session_id=payload.session_id,
+                    user_id=user_id,
                     question=payload.question,
                     document_ids=payload.document_ids,
                     db=db,
