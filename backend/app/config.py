@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = "development"
     # Supabase Authentication
-    supabase_url: str = "[http://dummy.com](http://dummy.com)"
+    SUPABASE_URL: str = "[http://dummy.com](http://dummy.com)"
 
     # Upload settings
     upload_dir: str = "../data/uploads"
@@ -73,20 +73,20 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = "documents"
 
     ollama_url: str = "http://localhost:11434"
-    #embedding_provider: str = "ollama"
-    embedding_provider:str="fastembed"
-    #embedding_model: str = "qwen3-embedding:0.6b"
-    embedding_model:str = "BAAI/bge-small-en-v1.5"
-    #embedding_dimensions: int = 1024
+    # embedding_provider: str = "ollama"
+    embedding_provider: str = "fastembed"
+    # embedding_model: str = "qwen3-embedding:0.6b"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    # embedding_dimensions: int = 1024
     embedding_dimensions: int = 384
     embedding_timeout: int = 120
     embedding_max_concurrency: int = 1
     embedding_batch_size: int = 16
 
-    #generation_model: str = "llama3.1:8b"
-    #generation_model: str ="llama3.2"
+    # generation_model: str = "llama3.1:8b"
+    # generation_model: str ="llama3.2"
     generation_model: str = "gemma3:4b"
-    visual_model:str = "gemma3:4b" 
+    visual_model: str = "gemma3:4b"
     generation_timeout: int = 120
 
     qdrant_max_concurrent_requests: int = 8
