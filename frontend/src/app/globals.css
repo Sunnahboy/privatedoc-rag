@@ -292,3 +292,4 @@ body {
   0% { background-color: rgba(250, 204, 21, 0.9); }
   100% { background-color: rgba(250, 204, 21, 0.55); }
 }
+html { scroll-behavior: smooth; }

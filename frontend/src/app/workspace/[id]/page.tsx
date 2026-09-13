@@ -27,6 +27,7 @@ import {
 import { API_BASE_URL } from "@/lib/constants";
 import { apiClient } from "@/lib/api-client";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext";
 
 const PDFViewer = dynamic(() => import("@/components/documents/PDFViewer"), {
@@ -455,6 +456,7 @@ function WorkspacePageContent({ id }: { id: string }) {
                 active={effectiveAiOpen}
                 onClick={() => setIsAiOpen((current) => !current)}
               />
+              <LogoutButton />
             </div>
           </div>
           <button
