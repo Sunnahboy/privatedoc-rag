@@ -1,11 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Dark stone background -->
-  <rect width="32" height="32" rx="6" fill="#1c1917"/>
-  <!-- Document outline -->
-  <path d="M10 6h8l6 6v12a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" fill="none" stroke="#d6d3d1" stroke-width="2" stroke-linejoin="round"/>
-  <!-- Folded corner -->
-  <path d="M18 6v6h6" fill="none" stroke="#d6d3d1" stroke-width="2" stroke-linejoin="round"/>
-  <!-- Security Shield / Lock inside -->
-  <path d="M12 16v-1a2 2 0 0 1 4 0v1" fill="none" stroke="#d6d3d1" stroke-width="2"/>
-  <rect x="11" y="16" width="6" height="5" rx="1" fill="#d6d3d1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <!-- WHY: Linear gradients provide a premium, modern feel (depth) without relying on messy raster textures that ruin scalability. -->
+    <linearGradient id="coverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3730A3" /> <!-- Deep Indigo -->
+      <stop offset="100%" stop-color="#4F46E5" /> <!-- Vibrant Indigo -->
+    </linearGradient>
+    
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24" /> <!-- Light Gold -->
+      <stop offset="100%" stop-color="#D97706" /> <!-- Dark Gold -->
+    </linearGradient>
+  </defs>
+
+  <!-- WHY: The book cover. A rounded rectangle taking up the majority of the viewbox to ensure maximum visibility at tiny sizes. -->
+  <rect x="15" y="10" width="70" height="80" rx="8" fill="url(#coverGrad)" />
+  
+  <!-- WHY: The spine binding. A darker, semi-transparent overlay on the left edge creates a 3D structural effect (realism) using pure flat shapes. -->
+  <rect x="15" y="10" width="12" height="80" rx="6" fill="#1E1B4B" opacity="0.5" />
+
+  <!-- WHY: The bookmark. A contrasting color (red) breaks up the blue/gold palette to draw the eye. The 'path' draws a ribbon with a cut tail. -->
+  <path d="M 60 90 v 10 l -8 -4 l -8 4 v -10 z" fill="#EF4444" />
+
+  <!-- THE LOCK (Privacy/Security indicator) -->
+  <!-- WHY: The lock shackle. Uses a stroked path with round caps so it doesn't look like jagged clipart. -->
+  <path d="M 40 45 v -8 a 10 10 0 0 1 20 0 v 8" fill="none" stroke="url(#goldGrad)" stroke-width="5" stroke-linecap="round" />
+  
+  <!-- WHY: The lock body. Overlaps the shackle to complete the mechanism. -->
+  <rect x="32" y="45" width="36" height="24" rx="4" fill="url(#goldGrad)" />
+  
+  <!-- WHY: The keyhole. Simple geometric subtraction using a circle and a polygon to clearly read as a lock, even at 16x16 resolution. -->
+  <circle cx="50" cy="53" r="3" fill="#1E1B4B" />
+  <path d="M 48 53 l -2 7 h 8 l -2 -7 z" fill="#1E1B4B" />
 </svg>
