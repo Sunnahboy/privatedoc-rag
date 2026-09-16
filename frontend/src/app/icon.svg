@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dark stone background -->
+  <rect width="32" height="32" rx="6" fill="#1c1917"/>
+  <!-- Document outline -->
+  <path d="M10 6h8l6 6v12a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" fill="none" stroke="#d6d3d1" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Folded corner -->
+  <path d="M18 6v6h6" fill="none" stroke="#d6d3d1" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Security Shield / Lock inside -->
+  <path d="M12 16v-1a2 2 0 0 1 4 0v1" fill="none" stroke="#d6d3d1" stroke-width="2"/>
+  <rect x="11" y="16" width="6" height="5" rx="1" fill="#d6d3d1"/>
+</svg>
